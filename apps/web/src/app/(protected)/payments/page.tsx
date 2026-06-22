@@ -1,50 +1,64 @@
-import { Metadata } from 'next';
+"use client";
+import { AppSidebar } from "@/components/ui/app-sidebar";
 
-export const metadata: Metadata = {
-  title: 'Payments | Complyr',
-  description: 'Manage your confidential payments and audits.',
-};
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
-export default function PaymentsPage() {
+import { PaymentForm } from "@/components/payment-form/PaymentForm";
+import { useState } from "react";
+
+
+
+import Image from "next/image";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
+
+export default function Page() {
+  const [walletAddress] = useState<`0x${string}` | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    const saved = localStorage.getItem("wallet-deployed");
+    return saved ? (saved as `0x${string}`) : undefined;
+  });
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Payments Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage your outgoing business payments with attached encrypted audit records.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Total Volume</h3>
+    <SidebarProvider
+      defaultOpen={true}
+      style={
+        {
+          "--sidebar-width": "350px",
+        } as React.CSSProperties
+      }
+    >
+      <AppSidebar walletAddress={walletAddress} />
+      <SidebarInset>
+        <header className="bg-background sticky top-0 flex shrink-0 items-center gap-2 border-b p-4 z-20">
+          <SidebarTrigger className="-ml-1" />
+          <div className="flex justify-center items-center w-full gap-1 mr-4">
+            <Image src="/complyrlogo.svg" alt="Complyr" width={120} height={32} className="h-6 w-auto" />
+            <div className="text-2xl font-bold">Complyr</div>
           </div>
-          <div className="text-2xl font-bold">$0.00</div>
-          <p className="text-xs text-muted-foreground">Encrypted on-chain</p>
-        </div>
-        <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Active Audits</h3>
-          </div>
-          <div className="text-2xl font-bold">0</div>
-          <p className="text-xs text-muted-foreground">Pending verification</p>
-        </div>
-      </div>
-
-      <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-        <div className="flex flex-col space-y-1.5 p-6">
-          <h3 className="text-lg font-semibold leading-none tracking-tight">Recent Transactions</h3>
-          <p className="text-sm text-muted-foreground">
-            You have not made any confidential payments yet.
-          </p>
-        </div>
-        <div className="p-6 pt-0">
-          <div className="flex items-center justify-center h-32 border-2 border-dashed rounded-md">
-            <p className="text-muted-foreground text-sm">No transactions found</p>
+        </header>
+        <div className="flex flex-1 flex-col gap-4 p-4">
+          <div className="h-full w-full">
+            <Tabs defaultValue="form" className="h-full w-full">
+              <TabsList className="flex justify-center mx-auto">
+                <TabsTrigger value="form">Payments</TabsTrigger>
+                <TabsTrigger value="audit">audits</TabsTrigger>
+              </TabsList>
+              <TabsContent value="chat">
+              </TabsContent>
+              <TabsContent value="form">
+                <PaymentForm walletAddress={walletAddress} />
+              </TabsContent>
+              <TabsContent value="audit">
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
