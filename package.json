@@ -1,0 +1,15 @@
+{
+  "name": "complyr-v2",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "test:contracts": "pnpm --filter contracts test",
+    "compile:contracts": "pnpm --filter contracts compile"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

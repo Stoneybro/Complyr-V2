@@ -1,0 +1,284 @@
+<div align="center">
+
+# 🔐 ZamaDrop
+
+### Private allocations. Public accountability.
+
+**Confidential token distribution on Zama fhEVM — encrypt every recipient's allocation, prove the campaign total entirely under encryption.**
+
+[![Solidity](https://img.shields.io/badge/Solidity-%5E0.8.24-363636?logo=solidity)](https://soliditylang.org/)
+[![Hardhat](https://img.shields.io/badge/Hardhat-%5E2.28-FFF100?logo=ethereum)](https://hardhat.org/)
+[![fhEVM](https://img.shields.io/badge/fhEVM-0.11.x-2D2D2D)](https://docs.zama.ai/fhevm)
+[![Zama](https://img.shields.io/badge/Zama-Protocol%20Bounty-FFD200)](https://www.zama.ai/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
+🌐 **English** | [简体中文](./README.zh-CN.md)
+
+🚀 Built for the **Zama Protocol Bounty** — Confidential Onchain Finance track.
+
+</div>
+
+---
+
+> **TL;DR** — Public airdrops leak a high-precision targeting database: anyone can sort recipients by amount. ZamaDrop keeps the campaign-level facts (total, recipient count, claim progress) fully public and verifiable, while every per-recipient amount lives on-chain as an FHE ciphertext only its owner can decrypt.
+
+## 📑 Table of Contents
+
+- [✨ Key Features](#-key-features)
+- [🔥 Highlights](#-highlights)
+- [🧩 The Problem](#-the-problem)
+- [💡 The Solution](#-the-solution)
+- [🏗️ Architecture](#️-architecture)
+- [🌐 Live Deployment (Sepolia)](#-live-deployment-sepolia)
+- [📜 Contract Interface](#-contract-interface)
+- [🛠️ Local Development](#️-local-development)
+- [🧪 Testing](#-testing)
+- [📂 Project Structure](#-project-structure)
+- [🔒 Security Model](#-security-model)
+- [🗺️ Roadmap](#️-roadmap)
+- [🎬 Demo Video](#-demo-video)
+- [📚 Documentation](#-documentation)
+- [🤝 Contributing](#-contributing)
+
+## ✨ Key Features
+
+- 🔐 **FHE-encrypted allocations** — every per-recipient amount lives on-chain as an `euint64` ciphertext; only the recipient can decrypt it.
+- 🧮 **Encrypted total-supply check** — the contract verifies `sum(allocations) == declaredTotal` *entirely under encryption*, so the operator cannot quietly under-fund the campaign.
+- 👁️ **Public accountability** — declared total, recipient count, finalize state, and claim progress all stay fully public and verifiable.
+- 🛡️ **KMS-hardened settlement** — `callbackFinalize` and `executeTransfer` verify Zama threshold-KMS signatures via `FHE.checkSignatures` before mutating state; a forged boolean or amount reverts.
+- 🧑‍⚖️ **Built-in auditor role** — a designated auditor can decrypt the aggregate `claimedTotal` for compliance reporting, but never any individual amount.
+- 🌐 **No off-chain daemon (V7+)** — in-browser active-pull: the wallet that triggers a flow pulls the KMS proof from the Gateway and self-submits the callback. ~10–15 s end-to-end.
+
+## 🔥 Highlights
+
+> **What's new — the build is KMS-hardened and Sepolia-validated.**
+
+- 🎉 **[V7] In-browser active-pull KMS callbacks** — the off-chain executor daemon is gone. The triggering wallet asks the Zama Gateway for a threshold-MPC-signed proof and self-submits `callbackFinalize` / `executeTransfer`. See [ADR 0003](./docs/ADR/0003-frontend-as-primary-executor.md).
+- 🛡️ **[KMS hardening] Threshold-signature-gated settlement** — both state-mutating callbacks now run `FHE.checkSignatures` first, closing the integrity gap documented in earlier MVP releases.
+- 🌐 **[Sepolia] Live KMS-hardened deployment** — current contracts on Ethereum Sepolia testnet; source of truth in [`deployments/sepolia.json`](./deployments/sepolia.json).
+- 🧪 **[Tests] 26 passing Hardhat tests + real-MetaMask E2E** — fhEVM-mock unit suite plus Synpress + Playwright wallet regression coverage.
+
+## 🧩 The Problem
+
+Every public airdrop today ships a side effect that nobody signed up for: **the allocation list itself becomes a high-precision targeting database**. Anyone can sort recipients by amount, identify the largest wallets, and turn the result into a phishing list, a social-engineering target list, or a long-term doxxing index. Merkle-tree drops solved *who is eligible* but published *how much they got* alongside it. The privacy gap is structural, not incidental — it scales with every successful launch.
+
+## 💡 The Solution
+
+ZamaDrop uses Zama's Fully Homomorphic Encryption to decouple the two layers that have always been bundled together:
+
+| Layer | Visibility | Detail |
+|---|---|---|
+| 🟢 **Campaign facts** | Public & verifiable | Declared total, recipient count, finalize state, claim progress |
+| 🔴 **Per-recipient amounts** | Encrypted | `euint64` ciphertexts only the recipient can decrypt |
+| 🟡 **Aggregate metrics** | Auditor-only | `claimedTotal` — decryptable by the auditor role, never individual amounts |
+
+The contract still checks the total-supply invariant — `sum(allocations) == declaredTotal` — entirely under encryption, so the operator cannot quietly under-fund the campaign.
+
+> **V7 privacy boundary** — Recipient *membership* is public on-chain by design: eligibility lists no longer leak balances, but the recipient set itself is enumerable from contract events. See [`docs/SECURITY.md`](./docs/SECURITY.md#v7-privacy-boundary) for the full boundary.
+
+## 🏗️ Architecture
+
+```mermaid
+graph LR
+    Admin[Admin]
+    Recipient[Recipient]
+    Auditor[Auditor]
+    Public[Public Observer]
+
+    Contract[ZamaDropCampaign<br/>fhEVM contract]
+    Token[ERC-20 Token<br/>escrow]
+    Gateway[Zama Gateway<br/>KMS / Relayer]
+
+    Admin -->|setAllocation<br/>finalize<br/>callbackFinalize| Contract
+    Recipient -->|requestMyAllocation<br/>claim<br/>executeTransfer| Contract
+    Auditor -->|requestClaimedTotalForAuditor| Contract
+    Public -->|read declaredTotal,<br/>recipientCount, finalized| Contract
+
+    Admin <-.->|publicDecrypt sumCheck| Gateway
+    Recipient <-.->|publicDecrypt claim amount| Gateway
+    Contract <-->|re-encrypt| Gateway
+    Contract -->|transfer on claim| Token
+
+    classDef role fill:#fef3c7,stroke:#92400e,color:#1f2937;
+    classDef system fill:#e0e7ff,stroke:#3730a3,color:#1f2937;
+    class Admin,Recipient,Auditor,Public role;
+    class Contract,Token,Gateway system;
+```
+
+**Four user roles, no separate system layer:**
+
+- 👮 **Admin** declares the total, sets each encrypted allocation, triggers `finalize`, and (V7+) self-submits `callbackFinalize` after actively pulling the KMS proof via the relayer SDK. No off-chain daemon involved.
+- 🎁 **Recipient** decrypts their own allocation in the browser via re-encryption, signs `claim`, then self-submits `executeTransfer` after pulling the per-claim KMS proof. Two wallet popups, ~15 s end-to-end.
+- 🧑‍⚖️ **Auditor** decrypts aggregate `claimedTotal` for compliance reporting — never per-recipient amounts.
+- 👁️ **Public** reads campaign metadata and finalize state without any wallet.
+
+The contract verifies KMS threshold signatures via `FHE.checkSignatures` before mutating state, so caller identity is irrelevant for integrity — **the trust root is the KMS proof, not whoever submits it**. See [ADR 0003](./docs/ADR/0003-frontend-as-primary-executor.md) for the architecture rationale and [Security Model](#-security-model) for the full trust analysis.
+
+## 🌐 Live Deployment (Sepolia)
+
+The latest deployment lives on Ethereum Sepolia testnet. Source of truth: [`deployments/sepolia.json`](./deployments/sepolia.json). The current build is **KMS-hardened** — `callbackFinalize` and `executeTransfer` both verify Zama threshold KMS signatures via `FHE.checkSignatures` before mutating state, closing the integrity gap that was documented in earlier MVP releases.
+
+| Contract | Address | Explorer |
+|---|---|---|
+| `MockToken` (ZDT) | `0x775e867541D348F022B3431209710B5BC02Ad29C` | [Etherscan](https://sepolia.etherscan.io/address/0x775e867541D348F022B3431209710B5BC02Ad29C) |
+| `ZamaDropCampaign` | `0xDAe72F548BFc37649c7Da24Cd0a2c90a73E6c5c1` | [Etherscan](https://sepolia.etherscan.io/address/0xDAe72F548BFc37649c7Da24Cd0a2c90a73E6c5c1) |
+
+Campaign parameters: `declaredTotal = 1000`, `recipientCount = 2`, token decimals `0`, admin/auditor set to `0x81f19692e5C59a7D7DB7D0689843C213C9BFA260` for the demo deployment. Earlier MVP deployments (without KMS hardening, or with `decimals=18` precision issues) are archived under `previousDeployments` in `deployments/sepolia.json`.
+
+## 📜 Contract Interface
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `setAllocation(address, externalEuint64, bytes)` | Admin | Append-only: assign one recipient's encrypted allocation; running total accumulates under FHE. |
+| `finalize()` | Admin | Compute `FHE.eq(runningTotal, declaredTotal)` and publish the `ebool` handle for public decryption. |
+| `callbackFinalize(bool result, bytes decryptionProof)` | Anyone (KMS-gated) | Write the decrypted finalize check back; calls `FHE.checkSignatures([finalizeCheckHandle], abi.encode(result), decryptionProof)` before flipping `finalized`. A forged boolean reverts. |
+| `requestMyAllocation()` | Recipient | Returns the recipient's encrypted allocation handle for browser-side re-encryption. |
+| `claim()` | Recipient | Atomic check-then-set: marks claimed, accumulates `claimedTotal` under FHE, exposes per-claim handle. |
+| `executeTransfer(address user, uint64 amount, bytes decryptionProof)` | Anyone (KMS-gated) | Settles the actual ERC-20 transfer; calls `FHE.checkSignatures([pendingClaimHandle[user]], abi.encode(amount), decryptionProof)` before transferring. A mismatched amount reverts. |
+| `requestClaimedTotalForAuditor()` | Auditor | Returns the aggregate `claimedTotal` ciphertext handle. |
+
+Public storage (`declaredTotal`, `recipientCount`, `finalized`, `allocationSet`, `claimed`, `transferred`, etc.) is readable by anyone.
+
+## 🛠️ Local Development
+
+Requires **Node.js ≥ 20**.
+
+### Smart contracts
+
+```bash
+npm install
+npm run compile        # compile contracts
+npm test               # run Hardhat tests against the fhEVM mock
+npm run lint           # ESLint over .ts and .sol
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev            # Vite dev server on http://localhost:5173
+```
+
+The frontend is a React Router 7 app composed around a single `CampaignLayout` (`frontend/src/pages/CampaignLayout.tsx`) with four capability tabs — `Overview`, `Admin`, `Recipient`, `Auditor` — routed under `/campaign/:address/{,admin,me,audit}`. All four tabs are always visible; role-gated tabs render an explicit `· active` / `· preview` suffix so a connected wallet can immediately see which capabilities it holds (see [`docs/role-page-protocol.md`](./docs/role-page-protocol.md) for the V6 information architecture). Configure addresses via `frontend/.env` (see `frontend/.env.example`); when unset, `frontend/src/config.ts` falls back to the deployment in `deployments/sepolia.json`. Wallet integration uses wagmi + viem; FHE operations go through `@zama-fhe/relayer-sdk`. UI components are built on shadcn/ui (Tailwind v4) and re-use design tokens from the landing-page repo via `frontend/src/styles/{tokens,effects}.css`.
+
+### KMS callbacks (V7+: in-browser active-pull)
+
+V7 eliminated the off-chain executor daemon. The shared util [`frontend/src/lib/kms-active-pull.ts`](./frontend/src/lib/kms-active-pull.ts) exposes `pullAndCallbackFinalize` and `pullAndExecuteTransfer`: the same wallet that triggers each flow asks the Zama Gateway for a threshold-MPC-signed proof via `relayer-sdk.publicDecrypt`, then self-submits `callbackFinalize` (admin) or `executeTransfer` (recipient). End-to-end ~10–15 s on a healthy gateway. The trust root is the KMS signature verified on-chain via `FHE.checkSignatures` — caller identity is irrelevant. See [ADR 0003](./docs/ADR/0003-frontend-as-primary-executor.md).
+
+For headless / CLI rescue paths, [`scripts/recover-stuck-finalize.ts`](./scripts/recover-stuck-finalize.ts) demonstrates the same pattern via `hre.fhevm.publicDecrypt`. Use it when a campaign is stuck Finalizing because no UI client has run yet.
+
+Operational helpers: `scripts/verify-roles.ts` (sanity-check admin/auditor + recent allocation events), `scripts/verify-decrypts.ts` (replay public decryption against a deployed campaign), `scripts/cli-setup.ts` (E2E driver for fresh deployments — also uses active-pull internally).
+
+## 🧪 Testing
+
+### Hardhat unit tests
+
+The full test suite runs against the fhEVM mock — no testnet, no Gateway latency. Coverage includes the state machine, allocation append-only enforcement, claim atomicity, ACL boundaries, and (now post-hardening) the KMS-signature integrity tests — including the dedicated case "amount 与 KMS 解密结果不一致时应 revert（防伪造）" which proves `executeTransfer` cannot be tricked into paying a forged amount.
+
+```bash
+npm test               # 26 passing
+npm run coverage
+```
+
+### Frontend end-to-end (Playwright + Synpress)
+
+Real-MetaMask E2E uses [Synpress](https://github.com/Synthetixio/synpress) for wallet automation. Cache a wallet first, then run the regression suites.
+
+```bash
+cd frontend
+npm run e2e:wallet-cache             # build a fresh wallet cache (one-time)
+npm run e2e:wallet-cache:connected   # variant: pre-connected to dApp
+npm run e2e:wallet-regression        # MM1–MM4: connect, recipient decrypt, auditor decrypt, reject-and-retry
+npm run e2e:ui-regression            # no-wallet UI smoke tests (role boundaries)
+npm run e2e:ui                       # interactive Playwright UI
+```
+
+See [`test/TEST_PLAN.md`](./test/TEST_PLAN.md) for the canonical test strategy, including Hardhat coverage, no-wallet UI smoke, and the Synpress + Playwright wallet E2E plan.
+
+## 📂 Project Structure
+
+```
+zamaDrop/
+├── contracts/              # ZamaDropCampaign.sol + MockToken.sol
+├── deploy/                 # hardhat-deploy scripts
+├── deployments/            # network deployment manifests (sepolia.json — current + previous)
+├── docs/                   # PRD, security/trust model, role protocol, PROGRESS, landing-page spec
+├── frontend/               # Vite + React Router 7 + wagmi + relayer-sdk + Tailwind v4
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── PublicHome.tsx, CampaignLayout.tsx, CampaignOverview.tsx
+│   │   │   ├── admin/      # AdminPage + SetAllocationForm + AllocationLedger + FinalizePanel
+│   │   │   ├── recipient/  # RecipientPage + AllocationCard + ClaimStepper + BalancePanel
+│   │   │   └── auditor/    # AuditorPage + AggregateCard + ComplianceCard + ClaimsActivity
+│   │   ├── components/     # CampaignCard, CapabilityStrip, TopBar, ui/* (shadcn primitives)
+│   │   ├── hooks/          # useCampaignReads, useTokenMeta, useCampaignEvents, useUserDecryptEuint64
+│   │   └── styles/         # tokens.css + effects.css (shared with secret-drop landing repo)
+├── openspec/               # spec-driven change proposals (005-frontend marked SUPERSEDED)
+├── scripts/                # recover-stuck-finalize (CLI rescue), verify-roles, verify-decrypts, cli-setup, e2e-sepolia
+└── test/                   # Hardhat + fhEVM mock unit tests (26 passing)
+```
+
+## 🔒 Security Model
+
+ZamaDrop validates settlement integrity via Zama's threshold KMS signatures on-chain.
+
+- **`callbackFinalize(bool, bytes decryptionProof)`** calls `FHE.checkSignatures` before flipping `finalized`. Any account may submit the result — the trust root is the KMS signature, not the caller's identity. A forged boolean reverts.
+- **`executeTransfer(address, uint64, bytes decryptionProof)`** calls `FHE.checkSignatures` binding `amount` to `pendingClaimHandle[user]` before transferring. A mismatched amount reverts.
+
+The encryption-side guarantees are unchanged: per-recipient allocations are strictly ACL-gated, `runningTotal` is verified against `declaredTotal` purely under FHE, and `claimedTotal` is decryptable only by the auditor. Full write-up: [`docs/SECURITY.md`](./docs/SECURITY.md).
+
+## 🗺️ Roadmap
+
+- ✅ **v0.x (now)** — four-role MVP with KMS-hardened settlement, Sepolia validated, real-MetaMask E2E coverage. V7 brings in-browser active-pull KMS callbacks (no off-chain daemon required) and an admin-friendly 5-step deployment wizard.
+- 🚧 **v1** — auditor multisig, Merkle eligibility integration so ZamaDrop layers cleanly on top of existing Merkle-based airdrop tooling, separate admin/auditor wallets in production deployments, V8 finalize-recovery escape hatch for prolonged Gateway outages.
+- 🔭 **Beyond** — campaign factory for multi-drop deployments, vesting curves, ERC-7984 confidential-transfer integration, contributor-grant and DAO-payroll templates that reuse the same primitives.
+
+## 🎬 Demo Video
+
+<div align="center">
+
+*[2-minute demo video coming soon]*
+
+</div>
+
+## 📚 Documentation
+
+| Doc | What's inside |
+|---|---|
+| [`docs/product/prd.en.md`](./docs/product/prd.en.md) | Product requirements (English) |
+| [`docs/product/prd.zh-CN.md`](./docs/product/prd.zh-CN.md) | Product requirements (Chinese) |
+| [`docs/SECURITY.md`](./docs/SECURITY.md) | Trust model, threat analysis, KMS verification, v1 hardening roadmap |
+| [`docs/role-page-protocol.md`](./docs/role-page-protocol.md) | Five-layer role model and V6 capability-tab frontend protocol |
+| [`docs/RUNBOOKS/sepolia-deploy.md`](./docs/RUNBOOKS/sepolia-deploy.md) | Sepolia deployment runbook |
+| [`test/TEST_PLAN.md`](./test/TEST_PLAN.md) | Canonical test strategy (Hardhat, UI smoke, Synpress + Playwright wallet E2E) |
+
+## 🤝 Contributing
+
+Issues and PRs are welcome. Please:
+
+1. Open an issue first for non-trivial changes so we can align on scope.
+2. Run `npm run lint && npm test` before submitting.
+3. Keep commits Conventional-Commits-style (`feat:`, `fix:`, `docs:`, …).
+4. AI-assisted contributions are fine — see [`AGENTS.md`](./AGENTS.md) for project conventions used by Claude / Codex / Gemini agents.
+
+## 📄 License
+
+[MIT](./LICENSE) © ZamaDrop Contributors
+
+## 🙏 Acknowledgments
+
+- [**Zama**](https://www.zama.ai/) for the Protocol Bounty and the fhEVM stack.
+- [`@fhevm/solidity`](https://www.npmjs.com/package/@fhevm/solidity) — FHE primitives in Solidity.
+- [`@zama-fhe/relayer-sdk`](https://www.npmjs.com/package/@zama-fhe/relayer-sdk) — browser-side encryption, re-encryption, and Gateway interaction.
+- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) — battle-tested ERC-20 base for the test token.
+
+---
+
+<div align="center">
+
+**🔐 ZamaDrop** — *Private allocations. Public accountability.*
+
+Built on [Zama fhEVM](https://docs.zama.ai/fhevm) · Submitted to the [Zama Protocol Bounty](https://www.zama.ai/)
+
+</div>

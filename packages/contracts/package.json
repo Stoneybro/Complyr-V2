@@ -1,0 +1,20 @@
+{
+  "name": "@complyr-v2/contracts",
+  "version": "1.0.0",
+  "description": "Complyr V2 Smart Contracts",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@fhevm/hardhat-plugin": "^0.4.2",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@fhevm/solidity": "^0.11.1",
+    "@openzeppelin/confidential-contracts": "^0.2.0"
+  }
+}
