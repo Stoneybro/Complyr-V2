@@ -1,12 +1,12 @@
-import Navigation from '../components/home/Navigation';
-import Hero from '../components/home/Hero';
-import Problem from '../components/home/Problem';
-import Features from '../components/home/Features';
-import HowItWorks from '../components/home/HowItWorks';
-import UseCases from '../components/home/UseCases';
-import Technology from '../components/home/Technology';
-import FinalCTA from '../components/home/FinalCTA';
-import Footer from '../components/home/Footer';
+import Navigation from './Navigation';
+import Hero from './Hero';
+import Problem from './Problem';
+import Features from './Features';
+import HowItWorks from './HowItWorks';
+import UseCases from './UseCases';
+import Technology from './Technology';
+import FinalCTA from './FinalCTA';
+import Footer from './Footer';
 
 export default function HomePage() {
   return (
