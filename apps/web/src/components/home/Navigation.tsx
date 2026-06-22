@@ -39,10 +39,10 @@ export default function Navigation() {
         </Link>
       </nav>
       <Link
-        href="/login"
+        href="/payments"
         className="bg-primary text-on-primary px-5 py-2 text-xs font-semibold uppercase tracking-widest hover:opacity-90 active:opacity-70 transition-all cursor-pointer"
       >
-        Try the demo
+        Launch App
       </Link>
     </header>
   );
