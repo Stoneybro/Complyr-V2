@@ -15,7 +15,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Plus, Trash2, Users, Info } from "lucide-react";
-import { useRecurringPayment } from "@/hooks/payments/useRecurringPayment";
 import { useSingleTransfer } from "@/hooks/payments/useSingleTransfer";
 import { useBatchTransfer } from "@/hooks/payments/useBatchTransfer";
 import { useContacts } from "@/hooks/useContacts";
@@ -33,7 +32,6 @@ import { fetchWalletBalance } from "@/utils/helper";
 // Audit context options
 const JURISDICTION_OPTIONS = getJurisdictionOptions();
 const CATEGORY_OPTIONS = getCategoryOptions();
-const RECURRING_DEMO_DISABLED = true;
 
 // Recipient with optional audit context from contact
 type RecipientData = {
@@ -57,11 +55,11 @@ const RecipientRow = React.memo(({
 }: {
     recipient: RecipientData;
     index: number;
-    type: "batch" | "recurring";
+    type: "batch";
     showRemove: boolean;
     tokenSymbol: string;
-    onUpdate: (type: "batch" | "recurring", index: number, field: keyof RecipientData, value: string) => void;
-    onRemove: (type: "batch" | "recurring", index: number) => void;
+    onUpdate: (type: "batch", index: number, field: keyof RecipientData, value: string) => void;
+    onRemove: (type: "batch", index: number) => void;
 }) => (
     <div className="space-y-4 p-4 border rounded-lg">
         <div className="flex gap-2 items-start">
@@ -167,10 +165,10 @@ interface PaymentFormProps {
     walletAddress?: `0x${string}`;
 }
 
-type PaymentType = "single" | "batch" | "recurring";
+type PaymentType = "single" | "batch";
 
 export function PaymentForm({ walletAddress }: PaymentFormProps) {
-    const [onchainTab, setOnchainTab] = useState<"single" | "batch" | "recurring">("single");
+    const [onchainTab, setOnchainTab] = useState<"single" | "batch">("single");
 
     const currentPaymentType: PaymentType = onchainTab;
 
@@ -189,12 +187,6 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
     // Batch payment state
     const [batchRecipients, setBatchRecipients] = useState<RecipientData[]>([{ address: "", amount: "" }]);
 
-    // Recurring payment state
-    const [recurringName, setRecurringName] = useState("");
-    const [recurringRecipients, setRecurringRecipients] = useState<RecipientData[]>([{ address: "", amount: "" }]);
-    const [recurringInterval, setRecurringInterval] = useState("60"); // 1 min default for demo
-    const [recurringDuration, setRecurringDuration] = useState("300"); // 5 min default for demo
-    const [recurringStartDate, setRecurringStartDate] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
     const [transactionStatus, setTransactionStatus] = useState<string>("");
 
@@ -204,18 +196,17 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
     // Mutations
     const singleMutation = useSingleTransfer(activeBalance);
     const batchMutation = useBatchTransfer(activeBalance);
-    const recurringMutation = useRecurringPayment(); 
 
     // Update processing state when mutation changes
     React.useEffect(() => {
-        const processing = singleMutation.isPending || batchMutation.isPending || recurringMutation.isPending;
+        const processing = singleMutation.isPending || batchMutation.isPending;
         setIsProcessing(processing);
         if (!processing) {
             // Short delay before clearing status after completion
             const timer = setTimeout(() => setTransactionStatus(""), 2000);
             return () => clearTimeout(timer);
         }
-    }, [singleMutation.isPending, batchMutation.isPending, recurringMutation.isPending]);
+    }, [singleMutation.isPending, batchMutation.isPending]);
 
     // Load contact for single transfer
     const loadContactForSingle = (contactId: string) => {
@@ -233,8 +224,8 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
         });
     };
 
-    // Load contact for batch/recurring (adds as new recipient)
-    const loadContactForList = (contactId: string, type: "batch" | "recurring") => {
+    // Load contact for batch (adds as new recipient)
+    const loadContactForList = (contactId: string, type: "batch") => {
         const contact = contacts.find(c => c.id === contactId);
         if (!contact) return;
 
@@ -251,45 +242,30 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
             // Replace empty first row or add to list
             const hasOnlyEmptyRow = batchRecipients.length === 1 && !batchRecipients[0].address;
             setBatchRecipients(hasOnlyEmptyRow ? newRecipients : [...batchRecipients, ...newRecipients]);
-        } else {
-            const hasOnlyEmptyRow = recurringRecipients.length === 1 && !recurringRecipients[0].address;
-            setRecurringRecipients(hasOnlyEmptyRow ? newRecipients : [...recurringRecipients, ...newRecipients]);
         }
     };
 
-    const addRecipient = (type: "batch" | "recurring") => {
+    const addRecipient = (type: "batch") => {
         if (type === "batch") {
             setBatchRecipients([...batchRecipients, { address: "", amount: "" }]);
-        } else {
-            setRecurringRecipients([...recurringRecipients, { address: "", amount: "" }]);
         }
     };
 
-    const removeRecipient = (type: "batch" | "recurring", index: number) => {
+    const removeRecipient = (type: "batch", index: number) => {
         if (type === "batch") {
             if (batchRecipients.length > 1) {
                 setBatchRecipients(batchRecipients.filter((_, i) => i !== index));
             } else {
                 setBatchRecipients([{ address: "", amount: "" }]);
             }
-        } else {
-            if (recurringRecipients.length > 1) {
-                setRecurringRecipients(recurringRecipients.filter((_, i) => i !== index));
-            } else {
-                setRecurringRecipients([{ address: "", amount: "" }]);
-            }
         }
     };
 
-    const updateRecipient = (type: "batch" | "recurring", index: number, field: keyof RecipientData, value: string) => {
+    const updateRecipient = (type: "batch", index: number, field: keyof RecipientData, value: string) => {
         if (type === "batch") {
             const updated = [...batchRecipients];
             updated[index] = { ...updated[index], [field]: value };
             setBatchRecipients(updated);
-        } else {
-            const updated = [...recurringRecipients];
-            updated[index] = { ...updated[index], [field]: value };
-            setRecurringRecipients(updated);
         }
     };
 
@@ -338,12 +314,6 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
         const tokenAddress = MockUSDCAddress as `0x${string}`;
 
         try {
-            if (currentPaymentType === "recurring" && RECURRING_DEMO_DISABLED) {
-                toast.error("Recurring payments are disabled in the confidential audit demo.");
-                setTransactionStatus("");
-                return;
-            }
-
             if (currentPaymentType === "single") {
                 if (!singleRecipient.address || !singleRecipient.amount) {
                     toast.error("Please fill in recipient and amount");
@@ -383,46 +353,6 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                     onStatusUpdate: setTransactionStatus,
                 });
                 setBatchRecipients([{ address: "", amount: "", referenceId: "" }]);
-            } else if (currentPaymentType === "recurring") {
-                if (!recurringName) {
-                    toast.error("Please provide a name for this recurring payment");
-                    setTransactionStatus("");
-                    return;
-                }
-                const addressesOnly = recurringRecipients.filter(r => r.address);
-                if (addressesOnly.length === 0) {
-                    toast.error("Please add at least one recipient");
-                    setTransactionStatus("");
-                    return;
-                }
-                const validRecipients = recurringRecipients.filter(r => r.address && r.amount);
-                if (validRecipients.length !== addressesOnly.length) {
-                    toast.error("Please provide an amount for all recipients");
-                    setTransactionStatus("");
-                    return;
-                }
-                if (!recurringDuration) {
-                    toast.error("Please specify the duration");
-                    setTransactionStatus("");
-                    return;
-                }
-                if (!validateRequiredAudit(validRecipients)) return;
-                await recurringMutation.mutateAsync({
-                    name: recurringName,
-                    recipients: validRecipients.map(r => r.address as `0x${string}`),
-                    amounts: validRecipients.map(r => r.amount),
-                    tokenAddress,
-                    interval: parseInt(recurringInterval),
-                    duration: parseInt(recurringDuration),
-                    transactionStartTime: recurringStartDate ? Math.floor(new Date(recurringStartDate).getTime() / 1000) : 0,
-                    audit: buildAudit(validRecipients),
-                    onStatusUpdate: setTransactionStatus,
-                });
-                // Reset
-                setRecurringName("");
-                setRecurringRecipients([{ address: "", amount: "", referenceId: "" }]);
-                setRecurringDuration("");
-                setRecurringStartDate("");
             }
         } catch (error) {
             console.error("Payment error:", error);
@@ -481,11 +411,10 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
 
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        <Tabs value={onchainTab} onValueChange={(v) => setOnchainTab(v as "single" | "batch" | "recurring")} className="w-full">
-                            <TabsList className="grid w-full grid-cols-3">
+                        <Tabs value={onchainTab} onValueChange={(v) => setOnchainTab(v as "single" | "batch")} className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
                                         <TabsTrigger value="single">Single</TabsTrigger>
                                         <TabsTrigger value="batch">Batch</TabsTrigger>
-                                        <TabsTrigger value="recurring">Recurring</TabsTrigger>
                                     </TabsList>
 
                                     
@@ -625,120 +554,6 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                             ))}
                                         </div>
                                     </TabsContent>
-                                    
-                                    <TabsContent value="recurring" className="space-y-6 mt-6">
-                                        {RECURRING_DEMO_DISABLED && (
-                                            <Alert variant="default" className="bg-muted/50 text-muted-foreground border-none">
-                                                <Info className="h-4 w-4" />
-                                                <AlertDescription className="text-xs">
-                                                    Recurring payments are disabled for this demo because the confidential audit flow is being showcased on single and batch payments only.
-                                                </AlertDescription>
-                                            </Alert>
-                                        )}
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            Set up automated scheduled payments.
-                                        </p>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="recurring-name" className="text-sm font-medium">Payment Name</Label>
-                                                <Input
-                                                    id="recurring-name"
-                                                    placeholder="e.g., Monthly Payroll"
-                                                    value={recurringName}
-                                                    onChange={(e) => setRecurringName(e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="recurring-start" className="text-sm font-medium">Start Date (Optional)</Label>
-                                                <Input
-                                                    id="recurring-start"
-                                                    type="datetime-local"
-                                                    value={recurringStartDate}
-                                                    onChange={(e) => setRecurringStartDate(e.target.value)}
-                                                    className="w-full"
-                                                />
-                                                <p className="text-xs text-muted-foreground mt-1">Leave empty to start immediately.</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex gap-2">
-                                            <div className="flex-1">
-                                                <ContactSelector
-                                                    onSelect={(id) => loadContactForList(id, "recurring")}
-                                                    label="Select Contacts"
-                                                />
-                                            </div>
-                                            <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => addRecipient("recurring")}
-                                                    className="h-10"
-                                                >
-                                                    <Plus className="h-4 w-4 mr-2" /> Add Recipient
-                                                </Button>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            {recurringRecipients.map((recipient, index) => (
-                                                <RecipientRow
-                                                    key={`recurring-${index}`}
-                                                    recipient={recipient}
-                                                    index={index}
-                                                    type="recurring"
-                                                    showRemove={recurringRecipients.length > 1 || !!recipient.address || !!recipient.amount}
-                                                    tokenSymbol="USDC"
-                                                    onUpdate={updateRecipient}
-                                                    onRemove={removeRecipient}
-                                                />
-                                            ))}
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-medium">Frequency</Label>
-                                                <Select value={recurringInterval} onValueChange={(v) => v && setRecurringInterval(v)}>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="60">Every Minute (demo)</SelectItem>
-                                                        <SelectItem value="3600">Hourly</SelectItem>
-                                                        <SelectItem value="86400">Daily</SelectItem>
-                                                        <SelectItem value="604800">Weekly</SelectItem>
-                                                        <SelectItem value="2592000">Monthly</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-medium">Duration</Label>
-                                                <Select value={recurringDuration} onValueChange={(v) => v && setRecurringDuration(v)}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select duration" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="300">5 Minutes (demo)</SelectItem>
-                                                        <SelectItem value="3600">1 Hour</SelectItem>
-                                                        <SelectItem value="86400">1 Day</SelectItem>
-                                                        <SelectItem value="604800">1 Week</SelectItem>
-                                                        <SelectItem value="2592000">1 Month</SelectItem>
-                                                        <SelectItem value="7776000">3 Months</SelectItem>
-                                                        <SelectItem value="15552000">6 Months</SelectItem>
-                                                        <SelectItem value="31536000">1 Year</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            
-                                            <div className="col-span-2 mt-2">
-                                                <Alert variant="default" className="bg-muted/50 text-muted-foreground border-none">
-                                                    <Info className="h-4 w-4" />
-                                                    <AlertDescription className="text-xs">
-                                                        Schedules represent automated payments that trigger regularly until the duration expires.
-                                                    </AlertDescription>
-                                                </Alert>
-                                            </div>
-                                        </div>
-                                    </TabsContent>
                                 </Tabs>
                         <div className="pt-2">
                             <Alert variant="default" className="bg-muted/50 text-muted-foreground border-none">
@@ -758,7 +573,7 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full" disabled={isProcessing || (currentPaymentType === "recurring" && RECURRING_DEMO_DISABLED)}>
+                            <Button type="submit" className="w-full" disabled={isProcessing}>
                                 {isProcessing ? (
                                     <>
                                         {transactionStatus !== "Encrypting..." && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -766,7 +581,7 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                     </>
                                 ) : (
                                     transactionStatus === "Complete" ? "Payment Successful" :
-                                    (currentPaymentType === "recurring" ? "Create Schedule" : "Confirm Payment")
+                                    "Confirm Payment"
                                 )}
                             </Button>
                         </div>

@@ -3,7 +3,7 @@ import "@nomicfoundation/hardhat-toolbox";
 import "@fhevm/hardhat-plugin";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.24",
+  solidity: "0.8.27",
   networks: {
     hardhat: {
       // fhEVM local network configuration
