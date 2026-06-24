@@ -8,7 +8,7 @@ import {
   SidebarGroup,
   SidebarGroupContent,
 } from '@/components/ui/sidebar';
-import { Loader2, Users, User, Trash2, MapPin, Tag } from 'lucide-react';
+import { Loader2, Users, User, Trash2, MapPin, Tag, Globe } from 'lucide-react';
 import { ContactForm } from './ContactForm';
 import { toast } from 'sonner';
 import type { Contact } from '@/lib/contact-store';
@@ -45,15 +45,15 @@ export function ContactList({ walletAddress, showForm, onCloseForm }: ContactLis
     onCloseForm();
   };
 
-  // Get first audit context badge info
-  const getAuditSummary = (contact: Contact) => {
-    const addr = contact.addresses.find(a => a.entityId || a.jurisdiction || a.category);
-    if (!addr) return null;
-    return {
-      jurisdiction: addr.jurisdiction,
-      category: addr.category,
-      entityId: addr.entityId,
-    };
+  // Helper to get audit fields safely
+  const getAuditBadge = (contact: Contact) => {
+      const addr = contact.addresses.find(a => a.entityId || a.jurisdictionCode || a.purposeCode);
+      if (!addr) return null;
+      return {
+          jurisdictionCode: addr.jurisdictionCode,
+          purposeCode: addr.purposeCode,
+          entityId: addr.entityId
+      };
   };
 
   if (showForm || editingContact) {
@@ -80,7 +80,7 @@ export function ContactList({ walletAddress, showForm, onCloseForm }: ContactLis
         ) : (
           <div className="space-y-1 p-2">
             {contacts.map((contact) => {
-              const audit = getAuditSummary(contact);
+              const audit = getAuditBadge(contact);
               return (
                 <div
                   key={contact.id}
@@ -102,23 +102,24 @@ export function ContactList({ walletAddress, showForm, onCloseForm }: ContactLis
                         ? `${contact.addresses[0].address.slice(0, 6)}...${contact.addresses[0].address.slice(-4)}`
                         : `${contact.addresses.length} addresses`}
                     </div>
-
-                    {/* Audit context badges */}
                     {audit && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {audit.jurisdiction && (
-                          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 gap-0.5">
-                            <MapPin className="h-2.5 w-2.5" />
-                            {audit.jurisdiction}
-                          </Badge>
-                        )}
-                        {audit.category && (
-                          <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-0.5">
-                            <Tag className="h-2.5 w-2.5" />
-                            {audit.category.replace('PAYROLL_', '').replace('_', ' ')}
-                          </Badge>
-                        )}
-                      </div>
+                        <div className="flex gap-2 text-xs mt-3">
+                            {audit.entityId && (
+                                <Badge variant="outline" className="bg-muted/50 text-[10px] py-0">Ref: {audit.entityId}</Badge>
+                            )}
+                            {audit.jurisdictionCode && (
+                                <Badge variant="outline" className="bg-muted/50 text-[10px] py-0 font-normal">
+                                    <Globe className="h-3 w-3 mr-1 opacity-70" />
+                                    {audit.jurisdictionCode}
+                                </Badge>
+                            )}
+                            {audit.purposeCode && (
+                                <Badge variant="outline" className="bg-muted/50 text-[10px] py-0 font-normal">
+                                    <Tag className="h-3 w-3 mr-1 opacity-70" />
+                                    {audit.purposeCode}
+                                </Badge>
+                            )}
+                        </div>
                     )}
                   </div>
 

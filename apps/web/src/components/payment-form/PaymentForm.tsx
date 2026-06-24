@@ -18,30 +18,49 @@ import { Loader2, Plus, Trash2, Users, Info } from "lucide-react";
 import { useSingleTransfer } from "@/hooks/payments/useSingleTransfer";
 import { useBatchTransfer } from "@/hooks/payments/useBatchTransfer";
 import { useContacts } from "@/hooks/useContacts";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { z } from "zod";
 import { MockUSDCAddress } from "@/lib/CA";
 import {
-    stringsToJurisdictions,
-    stringsToCategories,
-    getJurisdictionOptions,
-    getCategoryOptions
+    stringsToJurisdictionCodes,
+    stringsToPurposeCodes,
+    stringsToRiskTiers,
+    stringsToCounterpartyTypes,
+    getJurisdictionCodeOptions,
+    getPurposeCodeOptions,
+    getRiskTierOptions,
+    getCounterpartyTypeOptions
 } from "@/lib/audit-enums";
 import { useQuery } from "@tanstack/react-query";
 import { fetchWalletBalance } from "@/utils/helper";
 
 // Audit context options
-const JURISDICTION_OPTIONS = getJurisdictionOptions();
-const CATEGORY_OPTIONS = getCategoryOptions();
+const JURISDICTION_OPTIONS = getJurisdictionCodeOptions();
+const PURPOSE_CODE_OPTIONS = getPurposeCodeOptions();
 
 // Recipient with optional audit context from contact
 type RecipientData = {
     address: string;
     amount: string;
     referenceId?: string;
-    jurisdiction?: string;
-    category?: string;
+    jurisdictionCode?: string;
+    purposeCode?: string;
+    riskTier?: string;
+    counterpartyType?: string;
     contactName?: string;
 };
+
+// Zod schema for recipient validation
+const recipientSchema = z.object({
+    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format"),
+    amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be greater than 0"),
+    referenceId: z.string().max(7, "Reference ID max 7 chars").optional(),
+    jurisdictionCode: z.string().min(1, "Jurisdiction is required").refine(val => val !== "none", "Jurisdiction is required"),
+    purposeCode: z.string().min(1, "Purpose Code is required").refine(val => val !== "none", "Purpose Code is required"),
+    riskTier: z.string().min(1, "Risk Tier is required"),
+    counterpartyType: z.string().min(1, "Counterparty Type is required"),
+});
 
 // Extracted outside to prevent re-creation on every render (fixes focus loss)
 const RecipientRow = React.memo(({
@@ -100,7 +119,7 @@ const RecipientRow = React.memo(({
         </div>
         <div className="pt-3 border-t border-dashed">
             <h4 className="text-sm font-medium mb-3">Audit Records (Encrypted)</h4>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-3">
                 <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Reference ID</Label>
                     <Input
@@ -114,8 +133,12 @@ const RecipientRow = React.memo(({
                 <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Recipient Jurisdiction</Label>
                     <Select
-                        value={recipient.jurisdiction || ''}
-                        onValueChange={(value) => onUpdate(type, index, "jurisdiction", value || '')}
+                        value={recipient.jurisdictionCode || ''}
+                        onValueChange={(value) => {
+                            onUpdate(type, index, "jurisdictionCode", value || '');
+                            // If jurisdiction changes, riskTier might need to be clamped
+                            onUpdate(type, index, "riskTier", ""); 
+                        }}
                     >
                         <SelectTrigger className="w-full h-8 text-xs bg-muted/30">
                             <SelectValue placeholder="Select..." />
@@ -129,19 +152,57 @@ const RecipientRow = React.memo(({
                         </SelectContent>
                     </Select>
                 </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Expense Category</Label>
+                    <Label className="text-xs text-muted-foreground">Payment Purpose</Label>
                     <Select
-                        value={recipient.category || ''}
-                        onValueChange={(value) => onUpdate(type, index, "category", value || '')}
+                        value={recipient.purposeCode || ''}
+                        onValueChange={(value) => onUpdate(type, index, "purposeCode", value || '')}
                     >
                         <SelectTrigger className="w-full h-8 text-xs bg-muted/30">
                             <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
-                            {CATEGORY_OPTIONS.map((c) => (
+                            {PURPOSE_CODE_OPTIONS.map((c) => (
                                 <SelectItem key={c.value} value={c.value}>
                                     {c.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Risk Tier</Label>
+                    <Select
+                        value={recipient.riskTier || ''}
+                        onValueChange={(value) => onUpdate(type, index, "riskTier", value || '')}
+                    >
+                        <SelectTrigger className="w-full h-8 text-xs bg-muted/30">
+                            <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {getRiskTierOptions(recipient.jurisdictionCode).map((rt) => (
+                                <SelectItem key={rt.value} value={rt.value}>
+                                    {rt.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Counterparty Type</Label>
+                    <Select
+                        value={recipient.counterpartyType || ''}
+                        onValueChange={(value) => onUpdate(type, index, "counterpartyType", value || '')}
+                    >
+                        <SelectTrigger className="w-full h-8 text-xs bg-muted/30">
+                            <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {getCounterpartyTypeOptions().map((ct) => (
+                                <SelectItem key={ct.value} value={ct.value}>
+                                    {ct.label}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -160,6 +221,51 @@ const RecipientRow = React.memo(({
     </div>
 ));
 RecipientRow.displayName = "RecipientRow";
+
+// Contact selector component
+const ContactSelector = ({ contacts, onSelect, label = "Load from Contacts" }: { contacts: any[]; onSelect: (contactId: string) => void; label?: string }) => (
+    <div className="space-y-4">
+        <Select onValueChange={(v: string | null) => v && onSelect(v)}>
+            <SelectTrigger className="w-full">
+                <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder={label} />
+                </div>
+            </SelectTrigger>
+            <SelectContent>
+                {contacts.length === 0 ? (
+                    <SelectItem value="empty" disabled className="text-sm text-foreground py-3 max-w-[250px] whitespace-normal pointer-events-none data-[disabled]:opacity-100">
+                        No contacts found. Use the sidebar to add a contact and automate audit records.
+                    </SelectItem>
+                ) : (
+                    contacts.map((contact) => (
+                        <SelectItem key={contact.id} value={contact.id}>
+                            <div className="flex items-center gap-2">
+                                <span>{contact.name}</span>
+                                {contact.addresses.length > 1 && (
+                                    <span className="text-xs text-muted-foreground">
+                                        ({contact.addresses.length} addresses)
+                                    </span>
+                                )}
+                                {contact.addresses[0]?.jurisdiction && (
+                                    <span className="text-xs bg-muted px-1 rounded">
+                                        {contact.addresses[0].jurisdiction}
+                                    </span>
+                                )}
+                            </div>
+                        </SelectItem>
+                    ))
+                )}
+            </SelectContent>
+        </Select>
+        <Alert variant="default" className="bg-muted/50 text-muted-foreground border-none py-3">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+                Contacts pre-fill audit records automatically. Manage them in the sidebar.
+            </AlertDescription>
+        </Alert>
+    </div>
+);
 
 interface PaymentFormProps {
     walletAddress?: `0x${string}`;
@@ -186,6 +292,10 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
 
     // Batch payment state
     const [batchRecipients, setBatchRecipients] = useState<RecipientData[]>([{ address: "", amount: "" }]);
+
+    // Document and approval state
+    const [documentFile, setDocumentFile] = useState<File | null>(null);
+    const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [transactionStatus, setTransactionStatus] = useState<string>("");
@@ -218,8 +328,8 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
             address: addr.address,
             amount: singleRecipient.amount, // Keep existing amount
             referenceId: addr.entityId,
-            jurisdiction: addr.jurisdiction,
-            category: addr.category,
+            jurisdictionCode: addr.jurisdictionCode, // Maps legacy to new
+            purposeCode: addr.purposeCode, // Maps legacy to new
             contactName: contact.name,
         });
     };
@@ -233,8 +343,10 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
             address: addr.address,
             amount: "",
             referenceId: addr.entityId,
-            jurisdiction: addr.jurisdiction,
-            category: addr.category,
+            jurisdictionCode: addr.jurisdictionCode,
+            purposeCode: addr.purposeCode,
+            riskTier: "",
+            counterpartyType: "",
             contactName: contact.name,
         }));
 
@@ -272,39 +384,43 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
     // Build audit metadata from recipients (per-recipient arrays, converted to enum values)
     const buildAudit = (recipients: RecipientData[]) => {
         // Collect per-recipient data as string arrays
-        const jurisdictionStrings = recipients.map(r => r.jurisdiction);
-        const categoryStrings = recipients.map(r => r.category);
+        const jurisdictionStrings = recipients.map(r => r.jurisdictionCode);
+        const purposeCodeStrings = recipients.map(r => r.purposeCode);
         const referenceIdStrings = recipients.map(r => r.referenceId || "");
+        const riskTierStrings = recipients.map(r => r.riskTier);
+        const counterpartyTypeStrings = recipients.map(r => r.counterpartyType);
 
         // Filter out empty arrays for optional fields
         const hasJurisdictions = jurisdictionStrings.some(j => j && j !== "none");
-        const hasCategories = categoryStrings.some(c => c && c !== "none");
+        const hasPurposeCodes = purposeCodeStrings.some(c => c && c !== "none");
         const hasReferences = referenceIdStrings.some(r => r !== "");
+        const hasRiskTiers = riskTierStrings.some(rt => rt && rt !== "none");
+        const hasCounterpartyTypes = counterpartyTypeStrings.some(ct => ct && ct !== "none");
 
         // Convert strings to enum values (numbers)
         return {
-            jurisdictions: hasJurisdictions ? stringsToJurisdictions(jurisdictionStrings) : undefined,
-            categories: hasCategories ? stringsToCategories(categoryStrings) : undefined,
+            jurisdictionCodes: hasJurisdictions ? stringsToJurisdictionCodes(jurisdictionStrings) : undefined,
+            purposeCodes: hasPurposeCodes ? stringsToPurposeCodes(purposeCodeStrings) : undefined,
             referenceIds: hasReferences ? referenceIdStrings : undefined,
+            riskTiers: hasRiskTiers ? stringsToRiskTiers(riskTierStrings) : undefined,
+            counterpartyTypes: hasCounterpartyTypes ? stringsToCounterpartyTypes(counterpartyTypeStrings) : undefined,
+            requiresApproval,
         };
     };
 
     const validateRequiredAudit = (recipients: RecipientData[]) => {
-        const missingAudit = recipients.some((recipient) => (
-            !recipient.referenceId?.trim()
-            || !recipient.jurisdiction
-            || recipient.jurisdiction === "none"
-            || !recipient.category
-            || recipient.category === "none"
-        ));
-
-        if (missingAudit) {
-            toast.error("Reference ID, jurisdiction, and category are required for every recipient");
+        try {
+            z.array(recipientSchema).parse(recipients);
+            return true;
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                toast.error((error as any).errors[0].message);
+            } else {
+                toast.error("Validation failed");
+            }
             setTransactionStatus("");
             return false;
         }
-
-        return true;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -328,7 +444,8 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                     audit: buildAudit([singleRecipient]),
                     onStatusUpdate: setTransactionStatus,
                 });
-                setSingleRecipient({ address: "", amount: "", referenceId: "" });
+                setSingleRecipient({ address: "", amount: "", referenceId: "", riskTier: "", counterpartyType: "" });
+                setDocumentFile(null);
             } else if (currentPaymentType === "batch") {
                 const addressesOnly = batchRecipients.filter(r => r.address);
                 if (addressesOnly.length < 2) {
@@ -352,58 +469,14 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                     audit: buildAudit(validRecipients),
                     onStatusUpdate: setTransactionStatus,
                 });
-                setBatchRecipients([{ address: "", amount: "", referenceId: "" }]);
+                setBatchRecipients([{ address: "", amount: "", referenceId: "", riskTier: "", counterpartyType: "" }]);
+                setDocumentFile(null);
             }
         } catch (error) {
             console.error("Payment error:", error);
             setTransactionStatus("Failed");
         }
     };
-
-    // Contact selector component
-    const ContactSelector = ({ onSelect, label = "Load from Contacts" }: { onSelect: (contactId: string) => void; label?: string }) => (
-        <div className="space-y-4">
-            <Select onValueChange={(v: string | null) => v && onSelect(v)}>
-                <SelectTrigger className="w-full">
-                    <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <SelectValue placeholder={label} />
-                    </div>
-                </SelectTrigger>
-                <SelectContent>
-                    {contacts.length === 0 ? (
-                        <SelectItem value="empty" disabled className="text-sm text-foreground py-3 max-w-[250px] whitespace-normal pointer-events-none data-[disabled]:opacity-100">
-                            No contacts found. Use the sidebar to add a contact and automate audit records.
-                        </SelectItem>
-                    ) : (
-                        contacts.map((contact) => (
-                            <SelectItem key={contact.id} value={contact.id}>
-                                <div className="flex items-center gap-2">
-                                    <span>{contact.name}</span>
-                                    {contact.addresses.length > 1 && (
-                                        <span className="text-xs text-muted-foreground">
-                                            ({contact.addresses.length} addresses)
-                                        </span>
-                                    )}
-                                    {contact.addresses[0]?.jurisdiction && (
-                                        <span className="text-xs bg-muted px-1 rounded">
-                                            {contact.addresses[0].jurisdiction}
-                                        </span>
-                                    )}
-                                </div>
-                            </SelectItem>
-                        ))
-                    )}
-                </SelectContent>
-            </Select>
-            <Alert variant="default" className="bg-muted/50 text-muted-foreground border-none py-3">
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                    Contacts pre-fill audit records automatically. Manage them in the sidebar.
-                </AlertDescription>
-            </Alert>
-        </div>
-    );
 
     return (
         <div className="max-w-2xl mx-auto py-6">
@@ -422,7 +495,7 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                         <p className="text-sm text-muted-foreground mb-4">
                                             Send a payment to a single recipient.
                                         </p>
-                                        <ContactSelector onSelect={loadContactForSingle} />
+                                        <ContactSelector contacts={contacts} onSelect={loadContactForSingle} />
                                         
                                         <div className="space-y-4 p-4 border rounded-lg">
                                             <div className="grid grid-cols-[1fr_120px] gap-4">
@@ -455,7 +528,7 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                             
                                             <div className="pt-3 border-t border-dashed">
                                                 <h4 className="text-sm font-medium mb-3">Audit Records (Encrypted)</h4>
-                                                <div className="grid grid-cols-3 gap-3">
+                                                <div className="grid grid-cols-2 gap-3 mb-3">
                                                     <div className="space-y-1">
                                                         <Label htmlFor="single-ref" className="text-xs text-muted-foreground">Reference ID</Label>
                                                         <Input
@@ -470,8 +543,8 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                                     <div className="space-y-1">
                                                         <Label htmlFor="single-jurisdiction" className="text-xs text-muted-foreground">Recipient Jurisdiction</Label>
                                                         <Select
-                                                            value={singleRecipient.jurisdiction || ''}
-                                                            onValueChange={(value) => setSingleRecipient({ ...singleRecipient, jurisdiction: value || '' })}
+                                                            value={singleRecipient.jurisdictionCode || ''}
+                                                            onValueChange={(value) => setSingleRecipient({ ...singleRecipient, jurisdictionCode: value || '', riskTier: '' })}
                                                         >
                                                             <SelectTrigger id="single-jurisdiction" className="w-full h-8 text-xs bg-muted/30">
                                                                 <SelectValue placeholder="Select..." />
@@ -485,19 +558,57 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-3">
                                                     <div className="space-y-1">
-                                                        <Label htmlFor="single-category" className="text-xs text-muted-foreground">Expense Category</Label>
+                                                        <Label htmlFor="single-purpose" className="text-xs text-muted-foreground">Payment Purpose</Label>
                                                         <Select
-                                                            value={singleRecipient.category || ''}
-                                                            onValueChange={(value) => setSingleRecipient({ ...singleRecipient, category: value || '' })}
+                                                            value={singleRecipient.purposeCode || ''}
+                                                            onValueChange={(value) => setSingleRecipient({ ...singleRecipient, purposeCode: value || '' })}
                                                         >
-                                                            <SelectTrigger id="single-category" className="w-full h-8 text-xs bg-muted/30">
+                                                            <SelectTrigger id="single-purpose" className="w-full h-8 text-xs bg-muted/30">
                                                                 <SelectValue placeholder="Select..." />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {CATEGORY_OPTIONS.map((c) => (
+                                                                {PURPOSE_CODE_OPTIONS.map((c) => (
                                                                     <SelectItem key={c.value} value={c.value}>
                                                                         {c.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label htmlFor="single-risk-tier" className="text-xs text-muted-foreground">Risk Tier</Label>
+                                                        <Select
+                                                            value={singleRecipient.riskTier || ''}
+                                                            onValueChange={(value) => setSingleRecipient({ ...singleRecipient, riskTier: value || '' })}
+                                                        >
+                                                            <SelectTrigger id="single-risk-tier" className="w-full h-8 text-xs bg-muted/30">
+                                                                <SelectValue placeholder="Select..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {getRiskTierOptions(singleRecipient.jurisdictionCode).map((rt) => (
+                                                                    <SelectItem key={rt.value} value={rt.value}>
+                                                                        {rt.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label htmlFor="single-counterparty" className="text-xs text-muted-foreground">Counterparty Type</Label>
+                                                        <Select
+                                                            value={singleRecipient.counterpartyType || ''}
+                                                            onValueChange={(value) => setSingleRecipient({ ...singleRecipient, counterpartyType: value || '' })}
+                                                        >
+                                                            <SelectTrigger id="single-counterparty" className="w-full h-8 text-xs bg-muted/30">
+                                                                <SelectValue placeholder="Select..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {getCounterpartyTypeOptions().map((ct) => (
+                                                                    <SelectItem key={ct.value} value={ct.value}>
+                                                                        {ct.label}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>
@@ -524,6 +635,7 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                         <div className="flex gap-2">
                                             <div className="flex-1">
                                                 <ContactSelector
+                                                    contacts={contacts}
                                                     onSelect={(id) => loadContactForList(id, "batch")}
                                                     label="Select Contacts"
                                                 />
@@ -555,6 +667,37 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                                         </div>
                                     </TabsContent>
                                 </Tabs>
+                                
+                        <div className="space-y-4 mt-6 p-4 border rounded-lg bg-muted/10">
+                            <div>
+                                <Label className="text-sm font-medium">Supporting Document (Optional)</Label>
+                                <Input
+                                    type="file"
+                                    onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
+                                    className="text-sm mt-2 text-muted-foreground file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                />
+                                <p className="text-[10px] mt-1 text-muted-foreground">
+                                    Invoice, purchase order, or memo. Hashed onchain, encrypted offchain via IPFS.
+                                </p>
+                            </div>
+                            
+                            <div className="pt-2 border-t flex items-start space-x-2">
+                                <Checkbox 
+                                    id="requires-approval" 
+                                    checked={requiresApproval}
+                                    onCheckedChange={(c) => setRequiresApproval(c === true)}
+                                />
+                                <div className="space-y-1 leading-none">
+                                    <Label htmlFor="requires-approval" className="text-sm font-medium">
+                                        Require Second Approver
+                                    </Label>
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Opt-in tier for high-value payments. Enforces a Segregation of Duties FHE test.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="pt-2">
                             <Alert variant="default" className="bg-muted/50 text-muted-foreground border-none">
                                 <Info className="h-4 w-4" />

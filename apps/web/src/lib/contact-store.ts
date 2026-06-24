@@ -1,7 +1,7 @@
 export type CreateAddressInput = {
   address: string;
-  jurisdiction?: string;
-  category?: string;
+  jurisdictionCode?: string;
+  purposeCode?: string;
   entityId?: string;
 };
 

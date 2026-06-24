@@ -12,9 +12,11 @@ export function useBatchTransfer(activeBalance: any) {
       const encryptPromises = amounts.map(async (amount: string, index: number) => {
         // Here we pass the specific recipient's audit data if it exists, or undefined
         const recipientAudit = audit ? {
-          jurisdictions: audit.jurisdictions?.[index],
-          categories: audit.categories?.[index],
-          referenceIds: audit.referenceIds?.[index]
+          jurisdictionCode: audit.jurisdictionCodes?.[index],
+          purposeCode: audit.purposeCodes?.[index],
+          referenceId: audit.referenceIds?.[index],
+          riskTier: audit.riskTiers?.[index],
+          counterpartyType: audit.counterpartyTypes?.[index],
         } : undefined;
 
         const res = await fetch("/api/fhe/encrypt-input", {

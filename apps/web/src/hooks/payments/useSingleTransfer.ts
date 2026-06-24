@@ -8,11 +8,19 @@ export function useSingleTransfer(activeBalance: any) {
     mutationFn: async (data: any) => {
       data.onStatusUpdate?.("Encrypting...");
       
+      const recipientAudit = data.audit ? {
+        jurisdictionCode: data.audit.jurisdictionCodes?.[0],
+        purposeCode: data.audit.purposeCodes?.[0],
+        referenceId: data.audit.referenceIds?.[0],
+        riskTier: data.audit.riskTiers?.[0],
+        counterpartyType: data.audit.counterpartyTypes?.[0],
+      } : undefined;
+
       // 1. Call our backend to encrypt the input using FHE
       const encRes = await fetch("/api/fhe/encrypt-input", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: data.amount, audit: data.audit }),
+        body: JSON.stringify({ amount: data.amount, audit: recipientAudit }),
       });
       
       if (!encRes.ok) throw new Error("Encryption failed");

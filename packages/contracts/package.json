@@ -14,7 +14,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@fhevm/solidity": "0.7.0",
+    "@fhevm/solidity": "0.11.1",
     "@openzeppelin/confidential-contracts": "^0.2.0",
     "encrypted-types": "^0.0.4"
   }

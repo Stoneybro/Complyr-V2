@@ -1,233 +1,353 @@
 // Audit enum mappings - mirrors the Solidity enums
 // Used to convert between human-readable strings and contract enum values
 
-// Jurisdiction enum values (must match IntentRegistry.Jurisdiction)
-export const Jurisdiction = {
-    NONE: 0,
-    US_CA: 1,
-    US_NY: 2,
-    US_TX: 3,
-    US_FL: 4,
-    US_OTHER: 5,
-    UK: 6,
-    EU_DE: 7,
-    EU_FR: 8,
-    EU_OTHER: 9,
-    NG: 10,
-    SG: 11,
-    AE: 12,
-    OTHER: 13,
+// Jurisdiction risk-region codes (must match AuditRegistry.JurisdictionCode)
+export const JurisdictionCode = {
+    DOMESTIC: 0,
+    FATF_COMPLIANT: 1,
+    FATF_GREY: 2,
+    HIGH_RISK: 3,
+    SANCTIONED: 4,
 } as const;
 
-// Category enum values (must match IntentRegistry.Category)
-export const Category = {
-    NONE: 0,
-    PAYROLL_W2: 1,
-    PAYROLL_1099: 2,
-    CONTRACTOR: 3,
-    BONUS: 4,
-    INVOICE: 5,
-    VENDOR: 6,
-    GRANT: 7,
-    DIVIDEND: 8,
-    REIMBURSEMENT: 9,
-    OTHER: 10,
+// ISO 20022-derived payment purpose codes (must match AuditRegistry.PurposeCode)
+export const PurposeCode = {
+    GDDS: 0,
+    SVCS: 1,
+    SALA: 2,
+    SUPP: 3,
+    CONS: 4,
+    REBT: 5,
+    RENT: 6,
+    TAXS: 7,
+    INTC: 8,
+    LOAN: 9,
+    INVS: 10,
+    OTHR: 11,
 } as const;
 
-export type JurisdictionValue = typeof Jurisdiction[keyof typeof Jurisdiction];
-export type CategoryValue = typeof Category[keyof typeof Category];
+// RiskTier enum values (must match AuditRegistry.RiskTier)
+export const RiskTier = {
+    LOW: 0,
+    MEDIUM: 1,
+    HIGH: 2,
+    WATCHLIST: 3,
+} as const;
+
+// CounterpartyType enum values (must match AuditRegistry.CounterpartyType)
+export const CounterpartyType = {
+    VENDOR: 0,
+    CONTRACTOR: 1,
+    EMPLOYEE: 2,
+    INTERCOMPANY: 3,
+    GOVERNMENT: 4,
+} as const;
+
+export type JurisdictionCodeValue = typeof JurisdictionCode[keyof typeof JurisdictionCode];
+export type PurposeCodeValue = typeof PurposeCode[keyof typeof PurposeCode];
+export type RiskTierValue = typeof RiskTier[keyof typeof RiskTier];
+export type CounterpartyTypeValue = typeof CounterpartyType[keyof typeof CounterpartyType];
 
 // String to enum conversion maps
-export const JURISDICTION_MAP: Record<string, number> = {
+export const JURISDICTION_CODE_MAP: Record<string, number> = {
     "": 0,
     "none": 0,
-    "US-CA": 1,
-    "US-NY": 2,
-    "US-TX": 3,
-    "US-FL": 4,
-    "US-OTHER": 5,
-    "UK": 6,
-    "EU-DE": 7,
-    "EU-FR": 8,
-    "EU-OTHER": 9,
-    "NG": 10,
-    "SG": 11,
-    "AE": 12,
-    "OTHER": 13,
+    "DOMESTIC": 0,
+    "FATF_COMPLIANT": 1,
+    "FATF_GREY": 2,
+    "HIGH_RISK": 3,
+    "SANCTIONED": 4,
 };
 
-export const CATEGORY_MAP: Record<string, number> = {
+export const PURPOSE_CODE_MAP: Record<string, number> = {
     "": 0,
     "none": 0,
-    "PAYROLL_W2": 1,
-    "PAYROLL_1099": 2,
-    "CONTRACTOR": 3,
-    "BONUS": 4,
-    "INVOICE": 5,
-    "VENDOR": 6,
-    "GRANT": 7,
-    "DIVIDEND": 8,
-    "REIMBURSEMENT": 9,
-    "OTHER": 10,
+    "GDDS": 0,
+    "SVCS": 1,
+    "SALA": 2,
+    "SUPP": 3,
+    "CONS": 4,
+    "REBT": 5,
+    "RENT": 6,
+    "TAXS": 7,
+    "INTC": 8,
+    "LOAN": 9,
+    "INVS": 10,
+    "OTHR": 11,
+};
+
+export const RISK_TIER_MAP: Record<string, number> = {
+    "": 0,
+    "none": 0,
+    "LOW": 0,
+    "MEDIUM": 1,
+    "HIGH": 2,
+    "WATCHLIST": 3,
+};
+
+export const COUNTERPARTY_TYPE_MAP: Record<string, number> = {
+    "": 0,
+    "none": 0,
+    "VENDOR": 0,
+    "CONTRACTOR": 1,
+    "EMPLOYEE": 2,
+    "INTERCOMPANY": 3,
+    "GOVERNMENT": 4,
 };
 
 // Reverse maps for display purposes
-export const JURISDICTION_LABELS: Record<number, string> = {
-    0: "",
-    1: "US-CA",
-    2: "US-NY",
-    3: "US-TX",
-    4: "US-FL",
-    5: "US-OTHER",
-    6: "UK",
-    7: "EU-DE",
-    8: "EU-FR",
-    9: "EU-OTHER",
-    10: "NG",
-    11: "SG",
-    12: "AE",
-    13: "OTHER",
+export const JURISDICTION_CODE_LABELS: Record<number, string> = {
+    0: "DOMESTIC",
+    1: "FATF_COMPLIANT",
+    2: "FATF_GREY",
+    3: "HIGH_RISK",
+    4: "SANCTIONED",
 };
 
-export const CATEGORY_LABELS: Record<number, string> = {
-    0: "",
-    1: "PAYROLL_W2",
-    2: "PAYROLL_1099",
-    3: "CONTRACTOR",
-    4: "BONUS",
-    5: "INVOICE",
-    6: "VENDOR",
-    7: "GRANT",
-    8: "DIVIDEND",
-    9: "REIMBURSEMENT",
-    10: "OTHER",
+export const PURPOSE_CODE_LABELS: Record<number, string> = {
+    0: "GDDS",
+    1: "SVCS",
+    2: "SALA",
+    3: "SUPP",
+    4: "CONS",
+    5: "REBT",
+    6: "RENT",
+    7: "TAXS",
+    8: "INTC",
+    9: "LOAN",
+    10: "INVS",
+    11: "OTHR",
+};
+
+export const RISK_TIER_LABELS: Record<number, string> = {
+    0: "LOW",
+    1: "MEDIUM",
+    2: "HIGH",
+    3: "WATCHLIST",
+};
+
+export const COUNTERPARTY_TYPE_LABELS: Record<number, string> = {
+    0: "VENDOR",
+    1: "CONTRACTOR",
+    2: "EMPLOYEE",
+    3: "INTERCOMPANY",
+    4: "GOVERNMENT",
 };
 
 // Human-readable labels for UI display
-export const JURISDICTION_DISPLAY: Record<number, string> = {
-    0: "Not Specified",
-    1: "US - California",
-    2: "US - New York",
-    3: "US - Texas",
-    4: "US - Florida",
-    5: "US - Other",
-    6: "United Kingdom",
-    7: "Germany",
-    8: "France",
-    9: "Other EU",
-    10: "Nigeria",
-    11: "Singapore",
-    12: "UAE",
-    13: "Other",
+export const JURISDICTION_CODE_DISPLAY: Record<number, string> = {
+    0: "Domestic (Local)",
+    1: "FATF Compliant",
+    2: "FATF Grey-listed",
+    3: "High-Risk Center",
+    4: "Sanctioned Territory",
 };
 
-export const CATEGORY_DISPLAY: Record<number, string> = {
-    0: "Not Specified",
-    1: "Payroll (W2)",
-    2: "Payroll (1099)",
-    3: "Contractor",
-    4: "Bonus",
-    5: "Invoice",
-    6: "Vendor",
-    7: "Grant",
-    8: "Dividend",
-    9: "Reimbursement",
-    10: "Other",
+export const PURPOSE_CODE_DISPLAY: Record<number, string> = {
+    0: "Goods (GDDS)",
+    1: "Services (SVCS)",
+    2: "Payroll (SALA)",
+    3: "Supplier (SUPP)",
+    4: "Consulting (CONS)",
+    5: "Rebate/Refund (REBT)",
+    6: "Rent/Lease (RENT)",
+    7: "Taxes (TAXS)",
+    8: "Intra-company (INTC)",
+    9: "Loan (LOAN)",
+    10: "Investment (INVS)",
+    11: "Other (OTHR)",
+};
+
+export const RISK_TIER_DISPLAY: Record<number, string> = {
+    0: "Low",
+    1: "Medium",
+    2: "High",
+    3: "Watchlist",
+};
+
+export const COUNTERPARTY_TYPE_DISPLAY: Record<number, string> = {
+    0: "Vendor",
+    1: "Contractor",
+    2: "Employee",
+    3: "Intercompany",
+    4: "Government",
 };
 
 /**
- * Convert a jurisdiction string to enum value
- * @param jurisdiction - String like "US-CA", "UK", etc.
+ * Convert a jurisdiction code string to enum value
+ * @param jurisdictionCode - String like "DOMESTIC", "FATF_COMPLIANT", etc.
  * @returns Enum value (number)
  */
-export function stringToJurisdiction(jurisdiction: string | undefined): number {
-    if (!jurisdiction) return Jurisdiction.NONE;
-    return JURISDICTION_MAP[jurisdiction] ?? Jurisdiction.NONE;
+export function stringToJurisdictionCode(jurisdictionCode: string | undefined): number {
+    if (!jurisdictionCode) return JurisdictionCode.DOMESTIC;
+    return JURISDICTION_CODE_MAP[jurisdictionCode] ?? JurisdictionCode.DOMESTIC;
 }
 
 /**
- * Convert a category string to enum value
- * @param category - String like "PAYROLL_W2", "CONTRACTOR", etc.
+ * Convert a purpose code string to enum value
+ * @param purposeCode - String like "GDDS", "SALA", etc.
  * @returns Enum value (number)
  */
-export function stringToCategory(category: string | undefined): number {
-    if (!category) return Category.NONE;
-    return CATEGORY_MAP[category] ?? Category.NONE;
+export function stringToPurposeCode(purposeCode: string | undefined): number {
+    if (!purposeCode) return PurposeCode.GDDS;
+    return PURPOSE_CODE_MAP[purposeCode] ?? PurposeCode.GDDS;
 }
 
 /**
- * Convert arrays of jurisdiction strings to enum values
- * @param jurisdictions - Array of jurisdiction strings
+ * Convert a risk tier string to enum value
+ * @param riskTier - String like "LOW", "MEDIUM", etc.
+ * @returns Enum value (number)
+ */
+export function stringToRiskTier(riskTier: string | undefined): number {
+    if (!riskTier) return RiskTier.LOW;
+    return RISK_TIER_MAP[riskTier] ?? RiskTier.LOW;
+}
+
+/**
+ * Convert a counterparty type string to enum value
+ * @param counterpartyType - String like "VENDOR", "EMPLOYEE", etc.
+ * @returns Enum value (number)
+ */
+export function stringToCounterpartyType(counterpartyType: string | undefined): number {
+    if (!counterpartyType) return CounterpartyType.VENDOR;
+    return COUNTERPARTY_TYPE_MAP[counterpartyType] ?? CounterpartyType.VENDOR;
+}
+
+/**
+ * Convert arrays of jurisdiction code strings to enum values
+ * @param jurisdictionCodes - Array of jurisdiction strings
  * @returns Array of enum values
  */
-export function stringsToJurisdictions(jurisdictions: (string | undefined)[]): number[] {
-    return jurisdictions.map(j => stringToJurisdiction(j));
+export function stringsToJurisdictionCodes(jurisdictionCodes: (string | undefined)[]): number[] {
+    return jurisdictionCodes.map(j => stringToJurisdictionCode(j));
 }
 
 /**
- * Convert arrays of category strings to enum values
- * @param categories - Array of category strings
+ * Convert arrays of purpose code strings to enum values
+ * @param purposeCodes - Array of purpose code strings
  * @returns Array of enum values
  */
-export function stringsToCategories(categories: (string | undefined)[]): number[] {
-    return categories.map(c => stringToCategory(c));
+export function stringsToPurposeCodes(purposeCodes: (string | undefined)[]): number[] {
+    return purposeCodes.map(c => stringToPurposeCode(c));
 }
 
 /**
- * Convert enum value to jurisdiction string
+ * Convert arrays of risk tier strings to enum values
+ * @param riskTiers - Array of risk tier strings
+ * @returns Array of enum values
+ */
+export function stringsToRiskTiers(riskTiers: (string | undefined)[]): number[] {
+    return riskTiers.map(rt => stringToRiskTier(rt));
+}
+
+/**
+ * Convert arrays of counterparty type strings to enum values
+ * @param counterpartyTypes - Array of counterparty type strings
+ * @returns Array of enum values
+ */
+export function stringsToCounterpartyTypes(counterpartyTypes: (string | undefined)[]): number[] {
+    return counterpartyTypes.map(ct => stringToCounterpartyType(ct));
+}
+
+/**
+ * Convert enum value to jurisdiction code string
  * @param value - Enum value
- * @returns String like "US-CA"
+ * @returns String like "DOMESTIC"
  */
-export function jurisdictionToString(value: number): string {
-    return JURISDICTION_LABELS[value] ?? "";
+export function jurisdictionCodeToString(value: number): string {
+    return JURISDICTION_CODE_LABELS[value] ?? "";
 }
 
 /**
- * Convert enum value to category string
+ * Convert enum value to purpose code string
  * @param value - Enum value
- * @returns String like "PAYROLL_W2"
+ * @returns String like "GDDS"
  */
-export function categoryToString(value: number): string {
-    return CATEGORY_LABELS[value] ?? "";
+export function purposeCodeToString(value: number): string {
+    return PURPOSE_CODE_LABELS[value] ?? "";
 }
 
 /**
- * Get dropdown options for jurisdiction select
+ * Convert enum value to risk tier string
+ * @param value - Enum value
+ * @returns String like "LOW"
  */
-export function getJurisdictionOptions(): { value: string; label: string }[] {
+export function riskTierToString(value: number): string {
+    return RISK_TIER_LABELS[value] ?? "LOW";
+}
+
+/**
+ * Convert enum value to counterparty type string
+ * @param value - Enum value
+ * @returns String like "VENDOR"
+ */
+export function counterpartyTypeToString(value: number): string {
+    return COUNTERPARTY_TYPE_LABELS[value] ?? "VENDOR";
+}
+
+/**
+ * Get dropdown options for jurisdiction code select
+ */
+export function getJurisdictionCodeOptions(): { value: string; label: string }[] {
     return [
         { value: "none", label: "None" },
-        { value: "US-CA", label: "US - California" },
-        { value: "US-NY", label: "US - New York" },
-        { value: "US-TX", label: "US - Texas" },
-        { value: "US-FL", label: "US - Florida" },
-        { value: "US-OTHER", label: "US - Other" },
-        { value: "UK", label: "United Kingdom" },
-        { value: "EU-DE", label: "Germany" },
-        { value: "EU-FR", label: "France" },
-        { value: "EU-OTHER", label: "Other EU" },
-        { value: "NG", label: "Nigeria" },
-        { value: "SG", label: "Singapore" },
-        { value: "AE", label: "UAE" },
-        { value: "OTHER", label: "Other" },
+        { value: "DOMESTIC", label: "Domestic (Local)" },
+        { value: "FATF_COMPLIANT", label: "FATF Compliant" },
+        { value: "FATF_GREY", label: "FATF Grey-listed" },
+        { value: "HIGH_RISK", label: "High-Risk Center" },
+        { value: "SANCTIONED", label: "Sanctioned Territory" },
     ];
 }
 
 /**
- * Get dropdown options for category select
+ * Get dropdown options for purpose code select
  */
-export function getCategoryOptions(): { value: string; label: string }[] {
+export function getPurposeCodeOptions(): { value: string; label: string }[] {
     return [
         { value: "none", label: "None" },
-        { value: "PAYROLL_W2", label: "Payroll (W2)" },
-        { value: "PAYROLL_1099", label: "Payroll (1099)" },
-        { value: "CONTRACTOR", label: "Contractor" },
-        { value: "BONUS", label: "Bonus" },
-        { value: "INVOICE", label: "Invoice" },
+        { value: "GDDS", label: "Goods (GDDS)" },
+        { value: "SVCS", label: "Services (SVCS)" },
+        { value: "SALA", label: "Payroll (SALA)" },
+        { value: "SUPP", label: "Supplier (SUPP)" },
+        { value: "CONS", label: "Consulting (CONS)" },
+        { value: "REBT", label: "Rebate/Refund (REBT)" },
+        { value: "RENT", label: "Rent/Lease (RENT)" },
+        { value: "TAXS", label: "Taxes (TAXS)" },
+        { value: "INTC", label: "Intra-company (INTC)" },
+        { value: "LOAN", label: "Loan (LOAN)" },
+        { value: "INVS", label: "Investment (INVS)" },
+        { value: "OTHR", label: "Other (OTHR)" },
+    ];
+}
+
+/**
+ * Get dropdown options for risk tier select
+ */
+export function getRiskTierOptions(minimumRiskFloor: string = "LOW"): { value: string; label: string }[] {
+    const allOptions = [
+        { value: "LOW", label: "LOW - Routine, verified counterparty" },
+        { value: "MEDIUM", label: "MEDIUM - New vendor, elevated amount" },
+        { value: "HIGH", label: "HIGH - Cross-border to non-FATF, large single tx" },
+        { value: "WATCHLIST", label: "WATCHLIST - Sanctioned counterparty/territory" },
+    ];
+    
+    // Filter options based on minimum risk floor mapping from jurisdiction
+    let floorIndex = stringToRiskTier("LOW");
+    if (minimumRiskFloor === "SANCTIONED") floorIndex = stringToRiskTier("WATCHLIST");
+    else if (minimumRiskFloor === "HIGH_RISK") floorIndex = stringToRiskTier("HIGH");
+    else if (minimumRiskFloor === "FATF_GREY") floorIndex = stringToRiskTier("MEDIUM");
+    return allOptions.filter(opt => stringToRiskTier(opt.value) >= floorIndex);
+}
+
+/**
+ * Get dropdown options for counterparty type select
+ */
+export function getCounterpartyTypeOptions(): { value: string; label: string }[] {
+    return [
         { value: "VENDOR", label: "Vendor" },
-        { value: "GRANT", label: "Grant" },
-        { value: "DIVIDEND", label: "Dividend" },
-        { value: "REIMBURSEMENT", label: "Reimbursement" },
-        { value: "OTHER", label: "Other" },
+        { value: "CONTRACTOR", label: "Contractor" },
+        { value: "EMPLOYEE", label: "Employee" },
+        { value: "INTERCOMPANY", label: "Intercompany" },
+        { value: "GOVERNMENT", label: "Government" },
     ];
 }

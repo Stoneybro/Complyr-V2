@@ -23,17 +23,17 @@ import {
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Contact, CreateAddressInput } from '@/lib/contact-store';
-import { getJurisdictionOptions, getCategoryOptions } from '@/lib/audit-enums';
+import { getJurisdictionCodeOptions, getPurposeCodeOptions } from '@/lib/audit-enums';
 
-// Use centralized jurisdiction and category options
-const JURISDICTIONS = getJurisdictionOptions();
-const CATEGORIES = getCategoryOptions();
+// Use centralized jurisdiction and purpose options
+const JURISDICTION_CODES = getJurisdictionCodeOptions();
+const PURPOSE_CODES = getPurposeCodeOptions();
 
 
 type AddressFormData = {
     address: string;
-    jurisdiction: string;
-    category: string;
+    jurisdictionCode: string;
+    purposeCode: string;
     entityId: string;
 };
 
@@ -48,10 +48,10 @@ export function ContactForm({ walletAddress, contact, onClose }: ContactFormProp
     const [addresses, setAddresses] = useState<AddressFormData[]>(
         contact?.addresses.map(a => ({
             address: a.address,
-            jurisdiction: a.jurisdiction || '',
-            category: a.category || '',
+            jurisdictionCode: a.jurisdictionCode || '',
+            purposeCode: a.purposeCode || '',
             entityId: a.entityId || '',
-        })) || [{ address: '', jurisdiction: '', category: '', entityId: '' }]
+        })) || [{ address: '', jurisdictionCode: '', purposeCode: '', entityId: '' }]
     );
 
     const { mutate: createContact, isPending: isCreating } = useCreateContact();
@@ -60,7 +60,7 @@ export function ContactForm({ walletAddress, contact, onClose }: ContactFormProp
     const isPending = isCreating || isUpdating;
 
     const addAddress = () => {
-        setAddresses([...addresses, { address: '', jurisdiction: '', category: '', entityId: '' }]);
+        setAddresses([...addresses, { address: '', jurisdictionCode: '', purposeCode: '', entityId: '' }]);
     };
 
     const removeAddress = (index: number) => {
@@ -104,8 +104,8 @@ export function ContactForm({ walletAddress, contact, onClose }: ContactFormProp
         // Prepare addresses with reusable audit context
         const addressData: CreateAddressInput[] = validAddresses.map(a => ({
             address: a.address.trim(),
-            jurisdiction: a.jurisdiction && a.jurisdiction !== 'none' ? a.jurisdiction : undefined,
-            category: a.category && a.category !== 'none' ? a.category : undefined,
+            jurisdictionCode: a.jurisdictionCode && a.jurisdictionCode !== 'none' ? a.jurisdictionCode : undefined,
+            purposeCode: a.purposeCode && a.purposeCode !== 'none' ? a.purposeCode : undefined,
             entityId: a.entityId.trim() || undefined,
         }));
 
@@ -222,16 +222,16 @@ export function ContactForm({ walletAddress, contact, onClose }: ContactFormProp
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <Field>
-                                        <FieldLabel htmlFor={`jurisdiction-${index}`}>Jurisdiction</FieldLabel>
+                                        <FieldLabel htmlFor={`jurisdictionCode-${index}`}>Jurisdiction</FieldLabel>
                                         <Select
-                                            value={addr.jurisdiction || 'none'}
-                                            onValueChange={(value) => updateAddressField(index, 'jurisdiction', value || '')}
+                                            value={addr.jurisdictionCode || 'none'}
+                                            onValueChange={(value) => updateAddressField(index, 'jurisdictionCode', value || '')}
                                         >
-                                            <SelectTrigger id={`jurisdiction-${index}`}>
+                                            <SelectTrigger id={`jurisdictionCode-${index}`}>
                                                 <SelectValue placeholder="Select..." />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {JURISDICTIONS.map((j) => (
+                                                {JURISDICTION_CODES.map((j) => (
                                                     <SelectItem key={j.value} value={j.value}>
                                                         {j.label}
                                                     </SelectItem>
@@ -241,16 +241,16 @@ export function ContactForm({ walletAddress, contact, onClose }: ContactFormProp
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel htmlFor={`category-${index}`}>Category</FieldLabel>
+                                        <FieldLabel htmlFor={`purposeCode-${index}`}>Purpose Code</FieldLabel>
                                         <Select
-                                            value={addr.category || 'none'}
-                                            onValueChange={(value) => updateAddressField(index, 'category', value || '')}
+                                            value={addr.purposeCode || 'none'}
+                                            onValueChange={(value) => updateAddressField(index, 'purposeCode', value || '')}
                                         >
-                                            <SelectTrigger id={`category-${index}`}>
+                                            <SelectTrigger id={`purposeCode-${index}`}>
                                                 <SelectValue placeholder="Select..." />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {CATEGORIES.map((c) => (
+                                                {PURPOSE_CODES.map((c) => (
                                                     <SelectItem key={c.value} value={c.value}>
                                                         {c.label}
                                                     </SelectItem>
