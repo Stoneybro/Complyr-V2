@@ -8,7 +8,9 @@ Files added or changed:
 
 - `contracts/AuditRegistry.sol`
 - `contracts/ConfidentialUSDC.sol`
+- `contracts/ReviewTestRegistry.sol`
 - `test/AuditRegistry.ts`
+- `test/ReviewTestRegistry.ts`
 - `package.json`
 
 ## Contract Summary
@@ -41,7 +43,7 @@ The registry supports a direct `recordPayment` path for the current test scaffol
 
 The direct path accepts an encrypted amount for tests and local development, but the callback path is designed to receive the amount from the token transfer callback. This is the right integrity model because the registry should not trust the business to report the payment amount separately from the actual token movement.
 
-The callback integration test is currently pending because the mock token callback path hits an ACL regrant issue in the local fhEVM harness. The registry code is structured for this model, but the token harness still needs follow-up work.
+The callback integration test now passes. Audit-field proof conversion happens at the token entrypoint, then the token forwards already-validated encrypted handles to the registry callback with the actual transferred amount.
 
 ### `authTier` Is Contract-Derived
 
@@ -126,6 +128,29 @@ The registry includes the `Finding` struct from the plan and creates plaintext-c
 
 Encrypted threshold-triggered findings are not materialized in this contract because Solidity cannot branch publicly on an encrypted boolean. That belongs in the next `ReviewTestRegistry` layer, where findings should either store encrypted trigger handles or use a gateway/decryption flow to materialize public finding rows.
 
+## Review Test Registry
+
+`ReviewTestRegistry` now implements the first concrete Tier-1 encrypted test engine:
+
+- approved auditors only: test creation requires `AuditRegistry.auditorAccess(auditor)` to be `ANALYTICS` or `FULL`
+- bounded active auditor set with `maxActiveAuditors`
+- validated test type, scope, priority, and monitoring frequency
+- encrypted threshold storage per auditor and test type
+- encrypted boolean result storage per auditor, payment, and test type
+- monitoring cadence based on plaintext recipient evaluation counters
+- result reads restricted to the owning auditor or contract owner
+
+Implemented tests:
+
+- `LARGE_PAYMENT`
+- `PURPOSE_EXPOSURE`
+- `RISK_TIER_SPIKE`, using `HIGH + WATCHLIST` totals
+- `JURISDICTION_EXPOSURE`
+- `RECIPIENT_EXPOSURE`
+- `COUNTERPARTY_PATTERN`
+
+The registry deliberately stores encrypted result handles instead of creating public findings directly. An encrypted boolean cannot safely drive a public branch on-chain. Turning encrypted results into plaintext finding rows needs a public decrypt or auditor decrypt workflow.
+
 ## Token Scaffold Change
 
 The original `ConfidentialUSDC.sol` imported `@openzeppelin/confidential-contracts`, but that package is pinned to `@fhevm/solidity@0.7.0`. The installed Hardhat FHE plugin requires `@fhevm/solidity@0.11.1`.
@@ -156,17 +181,10 @@ This token is a scaffold, not a complete ERC-7984 implementation. A later token 
 Current verification:
 
 ```text
-6 passing
-1 pending
+15 passing
 ```
 
-The pending test is:
-
-```text
-records through confidentialTransferAndCall using the token callback amount
-```
-
-Reason: after moving audit-field proof conversion to the token entrypoint, the local fhEVM mock still raises `SenderNotAllowed()` when the registry tries to regrant a callback handle. This is isolated to the token callback harness. The core registry FHE behavior is covered and passing through `recordPayment`.
+The full suite now covers both audit storage and review-test evaluation.
 
 ## Dependency Note
 
@@ -174,13 +192,14 @@ Reason: after moving audit-field proof conversion to the token entrypoint, the l
 
 Because `pnpm` was not available through Corepack on this machine, I manually retargeted the local pnpm junctions from `@fhevm/solidity@0.7.0` to the already-installed `@fhevm/solidity@0.11.1` package so Hardhat could run. A future clean install should regenerate the lockfile and node_modules layout properly.
 
-## Remaining Work
+## Remaining Work / Input Needed
 
-The next contract step should be `ReviewTestRegistry`:
+The following items need product or FHE architecture decisions before they should be implemented:
 
-- store encrypted thresholds per auditor
-- evaluate encrypted comparisons on each payment
-- represent encrypted trigger results without unsafe public branching
-- write findings back to `AuditRegistry`
+- Public finding materialization: decide whether encrypted test results become findings through public decrypt, auditor-side decrypt plus signed attestation, or a gateway callback.
+- Standard priority gate: the plan says Standard tests run when amount exceeds a plaintext gate, but amount is intentionally encrypted. Decide whether to accept a plaintext coarse gate, run Standard every payment, or add a separate encrypted gate.
+- Active auditor cap: `maxActiveAuditors` defaults to `32`. This should be set from expected gas budgets before deployment.
+- Remaining Tier-1 tests: velocity, structuring/tolerance-band, reserve/liquidity, authorization-tier policy tests, approval-gap timing windows, segregation-of-duties escalation, and counterparty confirmation still need dedicated contract design.
+- Historical backtesting: not implemented yet. It needs pagination/batching rules to avoid gas-limit failures.
 
-The token callback path also needs a dedicated follow-up. The registry-side design is ready, but the local demo token needs a cleaner ACL ownership pattern for handles passed through callbacks.
+The demo token remains a scaffold. A production cUSDC should use a version-compatible ERC-7984 implementation once the OpenZeppelin confidential contracts package is aligned with the active FHE plugin version.

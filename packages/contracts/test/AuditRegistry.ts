@@ -267,7 +267,7 @@ describe("AuditRegistry", function () {
     expect(meta[8]).to.equal(true);
   });
 
-  it.skip("records through confidentialTransferAndCall using the token callback amount", async function () {
+  it("records through confidentialTransferAndCall using the token callback amount", async function () {
     const { owner, business, recipient, auditor, token, registry, registryAddress } = await deployFixture();
     const tokenAddress = await token.getAddress();
 

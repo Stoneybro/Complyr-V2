@@ -185,7 +185,7 @@ contract ConfidentialUSDC is ZamaEthereumConfig {
             transferred,
             data
         );
-        FHE.allowThis(success);
+        // FHE.allowThis(success);
         return transferred;
     }
 }

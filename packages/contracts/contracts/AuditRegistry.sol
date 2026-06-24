@@ -20,6 +20,10 @@ interface IConfidentialFungibleTokenReceiver {
     ) external returns (ebool);
 }
 
+interface IReviewTestRegistry {
+    function evaluateAll(uint256 paymentId) external;
+}
+
 contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig {
     enum PurposeCode {
         GDDS,
@@ -135,6 +139,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     address public immutable confidentialToken;
     address public owner;
     bool public authThresholdsConfigured;
+    address public reviewTestRegistry;
 
     euint64 private _managerThreshold;
     euint64 private _directorThreshold;
@@ -160,6 +165,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     event DocumentAttached(uint256 indexed paymentId, bytes32 docHash);
     event PaymentApproved(uint256 indexed paymentId, address indexed approver);
     event FindingCreated(uint256 indexed findingId, uint256 indexed paymentId, uint8 testType, uint8 severity);
+    event ReviewTestRegistrySet(address indexed registry);
 
     error NotOwner();
     error NotToken();
@@ -193,6 +199,12 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         if (newOwner == address(0)) revert InvalidAddress();
         emit OwnerTransferred(owner, newOwner);
         owner = newOwner;
+    }
+
+    function setReviewTestRegistry(address _reviewTestRegistry) external onlyOwner {
+        if (_reviewTestRegistry == address(0)) revert InvalidAddress();
+        reviewTestRegistry = _reviewTestRegistry;
+        emit ReviewTestRegistrySet(_reviewTestRegistry);
     }
 
     function setAuditorAccess(address auditor, AuditorAccess access) external onlyOwner {
@@ -468,6 +480,10 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         }
         if (fields.approved && fields.approver == sender) {
             _createFinding(paymentId, 11, 3, amount, bytes32(0));
+        }
+
+        if (reviewTestRegistry != address(0)) {
+            IReviewTestRegistry(reviewTestRegistry).evaluateAll(paymentId);
         }
 
         emit PaymentRecorded(paymentId, sender, fields.recipient);
