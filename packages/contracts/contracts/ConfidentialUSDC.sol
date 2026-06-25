@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import {FHE, ebool, euint8, euint64, externalEuint8, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
+import {ExternalAuditFields, CallbackAuditFields} from "./IComplyrTypes.sol";
 
 interface IConfidentialTransferReceiver {
     function onConfidentialTransferReceived(
@@ -21,32 +22,8 @@ contract ConfidentialUSDC is ZamaEthereumConfig {
     address public owner;
     mapping(address account => euint64 balance) private _balances;
 
-    struct ExternalAuditFields {
-        externalEuint8 purposeCode;
-        externalEuint8 riskTier;
-        externalEuint8 counterpartyType;
-        bytes inputProof;
-        address recipient;
-        bytes32 referenceId;
-        bytes32 docHash;
-        uint8 jurisdictionCode;
-        bool requiresApproval;
-        bool approved;
-        address approver;
-    }
-
-    struct CallbackAuditFields {
-        euint8 purposeCode;
-        euint8 riskTier;
-        euint8 counterpartyType;
-        address recipient;
-        bytes32 referenceId;
-        bytes32 docHash;
-        uint8 jurisdictionCode;
-        bool requiresApproval;
-        bool approved;
-        address approver;
-    }
+    // ExternalAuditFields and CallbackAuditFields are imported from IComplyrTypes.sol
+    // to avoid struct duplication between ConfidentialUSDC and AuditRegistry.
 
     event ConfidentialTransfer(address indexed from, address indexed to, euint64 amount);
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
@@ -114,6 +91,9 @@ contract ConfidentialUSDC is ZamaEthereumConfig {
         return _transferAndCall(msg.sender, to, encryptedAmount, data);
     }
 
+    /// @notice Primary audit entry point. Transfers tokens and records payment metadata
+    ///         in AuditRegistry atomically. The amount handle is pulled from the actual
+    ///         token transfer — NOT self-reported. Only category is encrypted at submission.
     function confidentialTransferAndCallWithAudit(
         address to,
         externalEuint64 amount,
@@ -121,34 +101,19 @@ contract ConfidentialUSDC is ZamaEthereumConfig {
         ExternalAuditFields calldata fields
     ) external returns (euint64) {
         euint64 encryptedAmount = FHE.fromExternal(amount, amountProof);
-        euint8 purposeCode = FHE.fromExternal(fields.purposeCode, fields.inputProof);
-        euint8 riskTier = FHE.fromExternal(fields.riskTier, fields.inputProof);
-        euint8 counterpartyType = FHE.fromExternal(fields.counterpartyType, fields.inputProof);
+        euint8  category        = FHE.fromExternal(fields.category, fields.inputProof);
 
-        FHE.allowThis(purposeCode);
-        FHE.allowThis(riskTier);
-        FHE.allowThis(counterpartyType);
-        FHE.allow(purposeCode, to);
-        FHE.allow(riskTier, to);
-        FHE.allow(counterpartyType, to);
-        FHE.allowTransient(purposeCode, to);
-        FHE.allowTransient(riskTier, to);
-        FHE.allowTransient(counterpartyType, to);
+        // Grant `to` (AuditRegistry) transient read access to category for the callback
+        FHE.allowThis(category);
+        FHE.allow(category, to);
+        FHE.allowTransient(category, to);
 
-        bytes memory data = abi.encode(
-            CallbackAuditFields({
-                purposeCode: purposeCode,
-                riskTier: riskTier,
-                counterpartyType: counterpartyType,
-                recipient: fields.recipient,
-                referenceId: fields.referenceId,
-                docHash: fields.docHash,
-                jurisdictionCode: fields.jurisdictionCode,
-                requiresApproval: fields.requiresApproval,
-                approved: fields.approved,
-                approver: fields.approver
-            })
-        );
+        bytes memory data = abi.encode(CallbackAuditFields({
+            category:    category,
+            recipient:   fields.recipient,
+            invoiceHash: fields.invoiceHash,
+            poHash:      fields.poHash
+        }));
 
         return _transferAndCall(msg.sender, to, encryptedAmount, data);
     }

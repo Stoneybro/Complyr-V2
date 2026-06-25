@@ -1,84 +1,133 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {FHE, ebool, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
+import {FHE, ebool, euint8, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// IAuditRegistry — interface used by ReviewTestRegistry to read payment data
+// and write findings back to AuditRegistry.
+// ─────────────────────────────────────────────────────────────────────────────
 interface IAuditRegistry {
     function auditorAccess(address auditor) external view returns (uint8);
 
-    function getPaymentHandles(
-        uint256 paymentId
-    ) external view returns (euint64 amount, bytes32 purposeCode, bytes32 riskTier, bytes32 counterpartyType, bytes32 authTier);
+    function getPaymentHandles(uint256 paymentId)
+        external
+        view
+        returns (euint64 amount, euint8 category, euint8 authLevel);
 
-    function getPaymentMeta(
-        uint256 paymentId
-    )
+    function getPaymentMeta(uint256 paymentId)
         external
         view
         returns (
             address sender,
             address recipient,
             address approver,
-            bytes32 referenceId,
-            bytes32 docHash,
-            uint32 blockNumber,
-            uint8 jurisdictionCode,
-            bool requiresApproval,
-            bool approved
+            bytes32 invoiceHash,
+            bytes32 poHash,
+            uint32  blockNumber,
+            bool    approved
         );
 
-    function getPurposeTotal(uint8 purposeCode) external view returns (euint64);
-    function getRiskTierTotal(uint8 riskTier) external view returns (euint64);
-    function getCounterpartyTotal(uint8 counterpartyType) external view returns (euint64);
-    function getJurisdictionTotal(uint8 jurisdictionCode) external view returns (euint64);
+    function getCategoryTotal(uint8 category) external view returns (euint64);
     function getRecipientTotal(address recipient) external view returns (euint64);
+
+    function recordFinding(
+        uint256 paymentId,
+        uint8   testType,
+        uint8   severity,
+        euint64 flaggedHandle,
+        bytes32 narrativeHash,
+        address auditor
+    ) external;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ReviewTestRegistry — rebuilt for Complyr V2
+//
+// Auditors configure tests here. evaluateAll() is called per payment by AuditRegistry.
+// Test results (encrypted ebool) are stored and exposed to auditors who then call
+// requestFindingCreation() to trigger Gateway decryption → finding creation.
+//
+// Key design decisions:
+//   - 7 test types, all mapped to real ISA audit assertions
+//   - STRUCTURING deferred to V2 (enum value reserved, no-op in evaluateAll)
+//   - SEGREGATION_OF_DUTIES fires from approvePayment() not evaluateAll()
+//   - Gateway pattern for finding creation (two-phase: evaluate → request → callback)
+//   - maxActiveAuditors defaults to 5 (was 32)
+//
+// V1 known limitations (documented, not bugs):
+//   - AUTHORIZATION_BREACH only catches unapproved non-routine payments.
+//     Detecting "wrong authority level" requires an on-chain AuthorityRegistry (V2).
+//   - STRUCTURING requires encrypted band configuration tied to DoA thresholds (V2).
+//   - category is self-reported by sender; auditors verify off-chain via invoiceHash/poHash.
+// ─────────────────────────────────────────────────────────────────────────────
 contract ReviewTestRegistry is ZamaEthereumConfig {
+
+    // ─── Enums ───────────────────────────────────────────────────────────────
+
+    /// @notice The 7 test types, each mapped to one or more ISA audit assertions.
     enum TestType {
-        LARGE_PAYMENT,
-        PURPOSE_EXPOSURE,
-        RISK_TIER_SPIKE,
-        JURISDICTION_EXPOSURE,
-        RECIPIENT_EXPOSURE,
-        COUNTERPARTY_PATTERN
+        MATERIALITY,              // 0 — amount > threshold (ISA: Occurrence, Accuracy)
+        AUTHORIZATION_BREACH,     // 1 — authLevel > ROUTINE AND !approved (ISA: Authorization)
+                                  //     V1: catches unapproved non-routine payments only.
+                                  //     V2: add AuthorityRegistry to check approver's level.
+        SEGREGATION_OF_DUTIES,    // 2 — sender == approver (ISA: Authorization)
+                                  //     Fires from approvePayment(), NOT from evaluateAll().
+                                  //     createSodFinding() is the entry point.
+        MISSING_EVIDENCE,         // 3 — amount > threshold AND invoiceHash == 0 (ISA: Occurrence)
+        CATEGORY_CONCENTRATION,   // 4 — categoryTotal[scope] > threshold (ISA: Classification)
+        RECIPIENT_CONCENTRATION,  // 5 — recipientTotal[addr] > threshold (ISA: Completeness)
+        STRUCTURING               // 6 — DEFERRED TO V2. Enum reserved. No-op in evaluateAll().
+                                  //     Reason: requires encrypted band relative to DoA thresholds.
     }
 
+    /// @notice Test execution priority — controls whether and when a test runs.
     enum Priority {
-        NONE,
-        MONITORING,
-        STANDARD,
-        CRITICAL
+        NONE,       // 0 — Test disabled
+        MONITORING, // 1 — Runs on a cadence (every N payments, via monitoringFrequency)
+        STANDARD,   // 2 — Runs on every payment
+        CRITICAL    // 3 — Runs on every payment, maps to highest finding severity
     }
+
+    // ─── Structs ─────────────────────────────────────────────────────────────
 
     struct ReviewTest {
-        euint64 threshold;
-        Priority priority;
-        uint8 scope;
-        uint16 monitoringFrequency;
-        bool exists;
+        euint64  threshold;          // Encrypted comparison threshold configured by auditor
+        Priority priority;           // Controls when the test runs
+        uint8    scope;              // Category index for CATEGORY_CONCENTRATION (0–7); 0 elsewhere
+        uint16   monitoringFrequency;// Used only when priority == MONITORING
+        bool     exists;
     }
 
-    IAuditRegistry public immutable auditRegistry;
-    address public owner;
-    uint256 public maxActiveAuditors = 32;
+    // ─── State Variables ─────────────────────────────────────────────────────
 
-    mapping(address auditor => mapping(uint8 testType => ReviewTest testConfig)) private _tests;
-    mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => ebool result))) private _testResults;
-    mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => bool exists))) private _hasTestResult;
-    mapping(address auditor => mapping(address recipient => uint256 count)) private _recipientEvaluationCount;
-    mapping(address auditor => bool listed) private _auditorListed;
-    mapping(address auditor => bool active) public auditorActive;
+    // NOTE: not immutable — EIP-1167 clone pattern
+    IAuditRegistry public auditRegistry;
+    address        public owner;
+    uint256        public maxActiveAuditors = 5; // default changed from 32
+
+    mapping(address auditor => mapping(uint8 testType => ReviewTest))                          private _tests;
+    mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => ebool))) private _testResults;
+    mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => euint64))) private _testedValues; // for Phase 2 finding creation
+    mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => bool)))  private _hasTestResult;
+    mapping(address auditor => mapping(address recipient => uint256 count))                    private _recipientEvaluationCount;
+    mapping(address auditor => bool listed)                                                    private _auditorListed;
+    mapping(address auditor => bool active)                                                    public  auditorActive;
 
     address[] public activeAuditors;
 
+    // ─── Events ──────────────────────────────────────────────────────────────
+
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
-    event MaxActiveAuditorsSet(uint256 maxActiveAuditors);
+    event MaxActiveAuditorsSet(uint256 newLimit);
     event TestCreated(address indexed auditor, uint8 indexed testType, uint8 scope, Priority priority);
     event TestDisabled(address indexed auditor, uint8 indexed testType);
     event TestsEvaluated(uint256 indexed paymentId, uint256 auditorCount);
     event TestEvaluated(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType, ebool result);
+    event FindingRequested(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType);
+
+    // ─── Errors ──────────────────────────────────────────────────────────────
 
     error NotOwner();
     error InvalidAddress();
@@ -90,18 +139,33 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     error ActiveAuditorLimitReached();
     error TestNotConfigured();
     error ResultNotAvailable();
+    error AlreadyInitialized();
+
+    // ─── Modifiers ───────────────────────────────────────────────────────────
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
 
-    constructor(address auditRegistry_) {
-        if (auditRegistry_ == address(0)) revert InvalidAddress();
-        auditRegistry = IAuditRegistry(auditRegistry_);
-        owner = msg.sender;
-        emit OwnerTransferred(address(0), msg.sender);
+    // ─── Initialization (Clone Pattern) ──────────────────────────────────────
+
+    /// @notice Lock the implementation contract.
+    constructor() {
+        auditRegistry = IAuditRegistry(address(1));
     }
+
+    /// @notice Called once by ComplyrFactory after cloning. Replaces the constructor.
+    function initialize(address auditRegistry_, address initialOwner) external {
+        if (address(auditRegistry) != address(0)) revert AlreadyInitialized();
+        if (auditRegistry_ == address(0)) revert InvalidAddress();
+        if (initialOwner == address(0)) revert InvalidAddress();
+        auditRegistry = IAuditRegistry(auditRegistry_);
+        owner = initialOwner;
+        emit OwnerTransferred(address(0), initialOwner);
+    }
+
+    // ─── Admin Functions ─────────────────────────────────────────────────────
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidAddress();
@@ -115,29 +179,28 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit MaxActiveAuditorsSet(newLimit);
     }
 
-    /**
-     * ACL grants:
-     * - address(this): required so this registry can compare payment values with the encrypted threshold.
-     * - msg.sender: lets the creating auditor decrypt/re-encrypt their own threshold for local verification.
-     */
+    // ─── Auditor Test Configuration ───────────────────────────────────────────
+
+    /// @notice Configures or updates a test for the calling auditor.
+    ///         Auditor must have ANALYTICS or FULL access granted by the business owner.
     function createTest(
-        uint8 testType,
-        uint8 scope,
+        uint8          testType,
+        uint8          scope,
         externalEuint64 encThreshold,
         bytes calldata inputProof,
-        Priority priority,
-        uint16 monitoringFrequency
+        Priority       priority,
+        uint16         monitoringFrequency
     ) external {
         _requireApprovedAuditor(msg.sender);
         _validateTest(testType, scope, priority, monitoringFrequency);
 
         euint64 threshold = FHE.fromExternal(encThreshold, inputProof);
         _tests[msg.sender][testType] = ReviewTest({
-            threshold: threshold,
-            priority: priority,
-            scope: scope,
+            threshold:          threshold,
+            priority:           priority,
+            scope:              scope,
             monitoringFrequency: monitoringFrequency,
-            exists: true
+            exists:             true
         });
 
         FHE.allowThis(threshold);
@@ -147,6 +210,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit TestCreated(msg.sender, testType, scope, priority);
     }
 
+    /// @notice Disables a test (sets priority to NONE) without deleting its config.
     function disableTest(uint8 testType) external {
         if (!_isValidTestType(testType)) revert InvalidTestType();
         ReviewTest storage testConfig = _tests[msg.sender][testType];
@@ -155,13 +219,29 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit TestDisabled(msg.sender, testType);
     }
 
+    // ─── Test Evaluation ─────────────────────────────────────────────────────
+
+    /// @notice Called by AuditRegistry._recordPayment for each payment.
+    ///         Runs all configured active tests for all active auditors.
+    ///         Results stored as ebool — auditors call requestFindingCreation() to escalate.
     function evaluateAll(uint256 paymentId) external {
         if (msg.sender != address(auditRegistry)) revert Unauthorized();
 
-        (euint64 amount, , , , ) = auditRegistry.getPaymentHandles(paymentId);
-        (, address recipient, , , , , uint8 jurisdictionCode, , ) = auditRegistry.getPaymentMeta(paymentId);
+        // Read payment data once — shared across all auditor iterations
+        (euint64 amount, /* category unused directly */, euint8 authLevel) =
+            auditRegistry.getPaymentHandles(paymentId);
+        (
+            ,
+            address recipient,
+            ,
+            bytes32 invoiceHash,
+            ,
+            ,
+            bool approved
+        ) = auditRegistry.getPaymentMeta(paymentId);
 
         uint256 auditorCount;
+
         for (uint256 i = 0; i < activeAuditors.length; i++) {
             address auditor = activeAuditors[i];
             if (!auditorActive[auditor]) continue;
@@ -170,45 +250,145 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
             auditorCount++;
             _recipientEvaluationCount[auditor][recipient]++;
 
-            _evaluateTest(auditor, paymentId, uint8(TestType.LARGE_PAYMENT), amount, recipient);
-            _evaluateTest(
-                auditor,
-                paymentId,
-                uint8(TestType.PURPOSE_EXPOSURE),
-                auditRegistry.getPurposeTotal(_tests[auditor][uint8(TestType.PURPOSE_EXPOSURE)].scope),
-                recipient
-            );
-            _evaluateTest(auditor, paymentId, uint8(TestType.RISK_TIER_SPIKE), _highAndWatchlistTotal(), recipient);
-            _evaluateTest(
-                auditor,
-                paymentId,
-                uint8(TestType.JURISDICTION_EXPOSURE),
-                auditRegistry.getJurisdictionTotal(jurisdictionCode),
-                recipient
-            );
-            _evaluateTest(
-                auditor,
-                paymentId,
-                uint8(TestType.RECIPIENT_EXPOSURE),
-                auditRegistry.getRecipientTotal(recipient),
-                recipient
-            );
-            _evaluateTest(
-                auditor,
-                paymentId,
-                uint8(TestType.COUNTERPARTY_PATTERN),
-                auditRegistry.getCounterpartyTotal(_tests[auditor][uint8(TestType.COUNTERPARTY_PATTERN)].scope),
-                recipient
-            );
+            // ── Test 0: MATERIALITY ─────────────────────────────────────────
+            // Assertion: Occurrence, Accuracy — "was this payment above examination threshold?"
+            _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MATERIALITY), amount);
+
+            // ── Test 1: AUTHORIZATION_BREACH ────────────────────────────────
+            // Assertion: Authorization — "does this payment need human authorization?"
+            // V1: fires when authLevel > ROUTINE (i.e. amount > manager threshold) AND !approved
+            // !approved is always true at creation (approved is only set via approvePayment).
+            // Upcast euint8 authLevel → euint64 to match _evaluateEncryptedTest signature.
+            if (!approved) {
+                _evaluateEncryptedTest(
+                    auditor,
+                    paymentId,
+                    uint8(TestType.AUTHORIZATION_BREACH),
+                    FHE.asEuint64(authLevel) // upcast: authLevel is euint8, function expects euint64
+                );
+            }
+
+            // ── Test 2: SEGREGATION_OF_DUTIES ──────────────────────────────
+            // Assertion: Authorization — "did the same person initiate and approve?"
+            // Does NOT fire here — fires from AuditRegistry.approvePayment() via createSodFinding().
+            // At evaluateAll time, approved is always false (no approver yet).
+
+            // ── Test 3: MISSING_EVIDENCE ────────────────────────────────────
+            // Assertion: Occurrence — "is there supporting documentation for this payment?"
+            // Only run if invoiceHash is empty — no FHE cost if document was provided.
+            if (invoiceHash == bytes32(0)) {
+                _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MISSING_EVIDENCE), amount);
+            }
+
+            // ── Test 4: CATEGORY_CONCENTRATION ──────────────────────────────
+            // Assertion: Classification — "is too much spend in one GL category?"
+            // Guard: only fetch the rollup total if this auditor has configured the test.
+            {
+                ReviewTest storage catTest = _tests[auditor][uint8(TestType.CATEGORY_CONCENTRATION)];
+                if (catTest.exists && catTest.priority != Priority.NONE) {
+                    euint64 catTotal = auditRegistry.getCategoryTotal(catTest.scope);
+                    _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.CATEGORY_CONCENTRATION), catTotal);
+                }
+            }
+
+            // ── Test 5: RECIPIENT_CONCENTRATION ────────────────────────────
+            // Assertion: Completeness, Occurrence — "too much spend to one recipient?"
+            {
+                ReviewTest storage recTest = _tests[auditor][uint8(TestType.RECIPIENT_CONCENTRATION)];
+                if (recTest.exists && recTest.priority != Priority.NONE) {
+                    euint64 recipientTotal = auditRegistry.getRecipientTotal(recipient);
+                    _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.RECIPIENT_CONCENTRATION), recipientTotal);
+                }
+            }
+
+            // ── Test 6: STRUCTURING — DEFERRED TO V2 ────────────────────────
+            // Reason: detecting "amount just below DoA threshold" requires encrypted band
+            // configuration tied to encrypted DoA thresholds. Cannot be configured safely
+            // without leaking what the thresholds are. See implementation_plan.md Section 11.
         }
 
         emit TestsEvaluated(paymentId, auditorCount);
     }
 
-    function getTest(
-        address auditor,
-        uint8 testType
-    ) external view returns (Priority priority, uint8 scope, uint16 monitoringFrequency, bool exists, euint64 threshold) {
+    // ─── SoD Finding Entry Point (called by AuditRegistry.approvePayment) ───
+
+    /// @notice Creates a SEGREGATION_OF_DUTIES finding when approvePayment detects
+    ///         that the approver and sender are the same address.
+    ///         This bypasses the Gateway flow since the condition is pure plaintext.
+    function createSodFinding(uint256 paymentId, address auditor) external {
+        if (msg.sender != address(auditRegistry)) revert Unauthorized();
+
+        // Use the payment amount as the flagged handle (most relevant to the finding)
+        (euint64 amount, , ) = auditRegistry.getPaymentHandles(paymentId);
+
+        // Create finding directly — no Gateway needed for a plaintext condition
+        auditRegistry.recordFinding(
+            paymentId,
+            uint8(TestType.SEGREGATION_OF_DUTIES),
+            uint8(Priority.CRITICAL), // SoD is always critical severity
+            amount,
+            bytes32(0),
+            auditor
+        );
+    }
+
+    // ─── Two-Phase Finding Creation (Gateway Pattern) ────────────────────────
+
+    /// @notice Phase 2 entry point. Called by auditor (or auditor's relay) after
+    ///         seeing a TestEvaluated event. Submits the stored ebool to the FHEVM
+    ///         Gateway for decryption. If the test fired, onFindingDecrypted creates
+    ///         the finding in AuditRegistry.
+    ///
+    ///         NOTE: Full Gateway integration requires GatewayCaller from the fhevm solidity library.
+    ///         If that import is unavailable in the current fhevm version, this function acts as a
+    ///         placeholder and the finding can be created via recordFindingIfTriggered().
+    function requestFindingCreation(uint256 paymentId, uint8 testType) external {
+        _requireApprovedAuditor(msg.sender);
+        if (!_isValidTestType(testType)) revert InvalidTestType();
+        if (testType == uint8(TestType.SEGREGATION_OF_DUTIES)) revert InvalidTestType(); // handled via createSodFinding
+        if (!_hasTestResult[msg.sender][paymentId][testType]) revert ResultNotAvailable();
+
+        emit FindingRequested(msg.sender, paymentId, testType);
+
+        // TODO: Replace with Gateway.requestDecryption when GatewayCaller is available.
+        // Current implementation: stub that auditor's off-chain system listens to via
+        // FindingRequested event, decrypts the ebool, and calls recordFindingIfTriggered.
+    }
+
+    /// @notice Called by auditor's off-chain system after decrypting the ebool result.
+    ///         Only creates a finding if the result was true (triggered).
+    ///         In production: replaced by onFindingDecrypted Gateway callback.
+    function recordFindingIfTriggered(
+        uint256 paymentId,
+        uint8   testType,
+        bool    triggered
+    ) external {
+        _requireApprovedAuditor(msg.sender);
+        if (!_isValidTestType(testType)) revert InvalidTestType();
+        if (!_hasTestResult[msg.sender][paymentId][testType]) revert ResultNotAvailable();
+
+        if (!triggered) return; // Test didn't fire — no finding, no on-chain trace
+
+        ReviewTest storage testConfig = _tests[msg.sender][testType];
+        euint64 flaggedHandle = _testedValues[msg.sender][paymentId][testType];
+
+        auditRegistry.recordFinding(
+            paymentId,
+            testType,
+            uint8(testConfig.priority),
+            flaggedHandle,
+            bytes32(0),
+            msg.sender
+        );
+    }
+
+    // ─── View Functions ──────────────────────────────────────────────────────
+
+    function getTest(address auditor, uint8 testType)
+        external
+        view
+        returns (Priority priority, uint8 scope, uint16 monitoringFrequency, bool exists, euint64 threshold)
+    {
         if (msg.sender != auditor && msg.sender != owner) revert Unauthorized();
         if (!_isValidTestType(testType)) revert InvalidTestType();
         ReviewTest storage testConfig = _tests[auditor][testType];
@@ -232,19 +412,24 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         return activeAuditors.length;
     }
 
-    function _evaluateTest(
+    // ─── Internal: Test Execution ────────────────────────────────────────────
+
+    /// @notice Runs a single FHE comparison test and stores the encrypted result.
+    ///         Also stores the tested value for use as a flaggedHandle in Phase 2.
+    function _evaluateEncryptedTest(
         address auditor,
         uint256 paymentId,
-        uint8 testType,
-        euint64 valueToTest,
-        address recipient
+        uint8   testType,
+        euint64 valueToTest
     ) private {
         ReviewTest storage testConfig = _tests[auditor][testType];
         if (!testConfig.exists || testConfig.priority == Priority.NONE) return;
-        if (!_shouldRun(testConfig, auditor, recipient)) return;
+        if (!_shouldRun(testConfig, auditor, address(0))) return;
 
         ebool result = FHE.gt(valueToTest, testConfig.threshold);
-        _testResults[auditor][paymentId][testType] = result;
+
+        _testResults[auditor][paymentId][testType]  = result;
+        _testedValues[auditor][paymentId][testType] = valueToTest; // stored for Phase 2 flaggedHandle
         _hasTestResult[auditor][paymentId][testType] = true;
 
         FHE.allowThis(result);
@@ -253,17 +438,12 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit TestEvaluated(auditor, paymentId, testType, result);
     }
 
-    function _highAndWatchlistTotal() private returns (euint64) {
-        euint64 highTotal = auditRegistry.getRiskTierTotal(2);
-        euint64 watchlistTotal = auditRegistry.getRiskTierTotal(3);
-        euint64 combined = FHE.add(highTotal, watchlistTotal);
-        FHE.allowThis(combined);
-        return combined;
-    }
+    // ─── Internal: Helpers ────────────────────────────────────────────────────
 
     function _shouldRun(ReviewTest storage testConfig, address auditor, address recipient) private view returns (bool) {
         if (testConfig.priority == Priority.CRITICAL || testConfig.priority == Priority.STANDARD) return true;
-
+        // MONITORING: run only on every Nth occurrence for this recipient
+        if (recipient == address(0)) return true; // non-recipient-specific tests always run
         uint256 count = _recipientEvaluationCount[auditor][recipient];
         return count != 0 && count % testConfig.monitoringFrequency == 0;
     }
@@ -285,7 +465,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
     function _isApprovedAuditor(address auditor) private view returns (bool) {
         uint8 access = auditRegistry.auditorAccess(auditor);
-        return access == 2 || access == 3;
+        return access == 2 || access == 3; // ANALYTICS or FULL
     }
 
     function _validateTest(uint8 testType, uint8 scope, Priority priority, uint16 monitoringFrequency) private pure {
@@ -294,16 +474,14 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         if (priority == Priority.MONITORING && monitoringFrequency == 0) revert InvalidFrequency();
         if (priority != Priority.MONITORING && monitoringFrequency != 0) revert InvalidFrequency();
 
-        if (testType == uint8(TestType.PURPOSE_EXPOSURE) && scope > 11) revert InvalidScope();
-        if (testType == uint8(TestType.COUNTERPARTY_PATTERN) && scope > 4) revert InvalidScope();
-        if (
-            testType != uint8(TestType.PURPOSE_EXPOSURE) &&
-            testType != uint8(TestType.COUNTERPARTY_PATTERN) &&
-            scope != 0
-        ) revert InvalidScope();
+        // CATEGORY_CONCENTRATION: scope must be a valid Category index (0–7)
+        if (testType == uint8(TestType.CATEGORY_CONCENTRATION) && scope > 7) revert InvalidScope();
+
+        // All other tests: scope must be 0 (unused)
+        if (testType != uint8(TestType.CATEGORY_CONCENTRATION) && scope != 0) revert InvalidScope();
     }
 
     function _isValidTestType(uint8 testType) private pure returns (bool) {
-        return testType <= uint8(TestType.COUNTERPARTY_PATTERN);
+        return testType <= uint8(TestType.STRUCTURING); // 0–6
     }
 }

@@ -6,10 +6,10 @@ import {
     ebool,
     euint8,
     euint64,
-    externalEuint8,
     externalEuint64
 } from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
+import {ExternalAuditFields, CallbackAuditFields} from "./IComplyrTypes.sol";
 
 interface IConfidentialFungibleTokenReceiver {
     function onConfidentialTransferReceived(
@@ -22,161 +22,149 @@ interface IConfidentialFungibleTokenReceiver {
 
 interface IReviewTestRegistry {
     function evaluateAll(uint256 paymentId) external;
+    function createSodFinding(uint256 paymentId, address auditor) external;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AuditRegistry — rebuilt for Complyr V2
+//
+// Stores encrypted payment records and findings per business.
+// Deployed as an EIP-1167 clone by ComplyrFactory (one instance per business).
+// The sole payment entry point is onConfidentialTransferReceived — no self-reporting.
+//
+// Key design decisions:
+//   - approved/approver always false/address(0) at creation; only approvePayment() sets them
+//   - ReviewTestRegistry gets read access via a dedicated path, NOT via the _auditors array
+//   - The _auditors array cap (MAX_AUDITORS = 5) is exclusively for external human auditors
+//   - setAuthTierThresholds is onlyOwner — business sets its own Delegation of Authority policy
+// ─────────────────────────────────────────────────────────────────────────────
 contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig {
-    enum PurposeCode {
-        GDDS,
-        SVCS,
-        SALA,
-        SUPP,
-        CONS,
-        REBT,
-        RENT,
-        TAXS,
-        INTC,
-        LOAN,
-        INVS,
-        OTHR
+
+    // ─── Enums ───────────────────────────────────────────────────────────────
+
+    /// @notice GL-level payment categories replacing ISO 20022 purpose codes.
+    ///         8 buckets vs old 12 = 33% fewer rollup FHE ops.
+    enum Category {
+        OPEX,         // 0 — Operating expenses (supplies, utilities, general)
+        CAPEX,        // 1 — Capital expenditure (equipment, property)
+        PAYROLL,      // 2 — Salary, wages, benefits
+        PROFESSIONAL, // 3 — Consulting, legal, advisory services
+        INTERCOMPANY, // 4 — Related party / intra-group transfers
+        TAX,          // 5 — Tax payments to authorities
+        DEBT_SERVICE, // 6 — Loan repayments, interest
+        OTHER         // 7 — Unclassified
     }
 
-    enum RiskTier {
-        LOW,
-        MEDIUM,
-        HIGH,
-        WATCHLIST
+    /// @notice Derived authorization level for the payment. Never submitted — always computed
+    ///         from amount vs owner-configured DoA thresholds.
+    enum AuthLevel {
+        ROUTINE,  // 0 — Below manager threshold, no human authorization needed
+        MANAGER,  // 1 — Requires manager sign-off
+        DIRECTOR, // 2 — Requires director sign-off
+        BOARD     // 3 — Requires board resolution
     }
 
-    enum CounterpartyType {
-        VENDOR,
-        CONTRACTOR,
-        EMPLOYEE,
-        INTERCOMPANY,
-        GOVERNMENT
-    }
-
-    enum AuthTier {
-        ROUTINE,
-        MANAGER,
-        DIRECTOR,
-        BOARD
-    }
-
-    enum JurisdictionCode {
-        DOMESTIC,
-        FATF_COMPLIANT,
-        FATF_GREY,
-        HIGH_RISK,
-        SANCTIONED
-    }
-
+    /// @notice Tiered access model for external auditors.
     enum AuditorAccess {
-        NONE,
-        SIGNAL,
-        ANALYTICS,
-        FULL
+        NONE,      // 0 — No access
+        SIGNAL,    // 1 — Findings feed only (severity + testType, no handles)
+        ANALYTICS, // 2 — Encrypted rollup totals + category handles
+        FULL       // 3 — Full payment handle access + analytics
     }
 
+    // ─── Structs ─────────────────────────────────────────────────────────────
+
+    /// @notice The canonical payment record. Immutable after creation except for
+    ///         the approved/approver fields which are set via approvePayment().
     struct PaymentRecord {
-        euint64 amount;
-        euint8 purposeCode;
-        euint8 riskTier;
-        euint8 counterpartyType;
-        euint8 authTier;
-        address sender;
-        address recipient;
-        address approver;
-        bytes32 referenceId;
-        bytes32 docHash;
-        uint32 blockNumber;
-        uint8 jurisdictionCode;
-        bool requiresApproval;
-        bool approved;
+        // Encrypted — FHE handles
+        euint64 amount;      // Token transfer amount — cryptographically verified (from callback)
+        euint8  category;    // GL category declared by sender (Category enum)
+        euint8  authLevel;   // DERIVED by contract from amount vs DoA thresholds (AuthLevel enum)
+
+        // Plaintext with access control
+        address sender;      // Who initiated the payment
+        address recipient;   // Who received the payment
+        address approver;    // Who authorized — address(0) until approvePayment() is called
+        bool    approved;    // Always false at creation; set true only by approvePayment()
+
+        // Evidence anchors — immutable after creation
+        bytes32 invoiceHash; // keccak256 of supporting invoice — feeds MISSING_EVIDENCE test
+        bytes32 poHash;      // keccak256 of purchase order — off-chain three-way match anchor
+
+        // Metadata
+        uint32  blockNumber; // Block when recorded
     }
 
+    /// @notice A finding created when a ReviewTestRegistry test fires.
     struct Finding {
         uint256 paymentId;
-        uint8 testType;
-        uint8 severity;
-        euint64 flaggedHandle;
-        uint32 triggeredAtBlock;
-        bytes32 narrativeHash;
-        bool escalated;
+        uint8   testType;         // Maps to TestType enum in ReviewTestRegistry
+        uint8   severity;         // Plaintext — mirrors auditor's configured Priority
+        euint64 flaggedHandle;    // Encrypted value that triggered the test
+        uint32  triggeredAtBlock;
+        bytes32 narrativeHash;    // Optional: keccak256 of auditor's written finding narrative
+        bool    escalated;
     }
 
-    struct ExternalAuditFields {
-        externalEuint8 purposeCode;
-        externalEuint8 riskTier;
-        externalEuint8 counterpartyType;
-        bytes inputProof;
-        address recipient;
-        bytes32 referenceId;
-        bytes32 docHash;
-        uint8 jurisdictionCode;
-        bool requiresApproval;
-        bool approved;
-        address approver;
-    }
+    // ─── Constants ───────────────────────────────────────────────────────────
 
-    struct CallbackAuditFields {
-        euint8 purposeCode;
-        euint8 riskTier;
-        euint8 counterpartyType;
-        address recipient;
-        bytes32 referenceId;
-        bytes32 docHash;
-        uint8 jurisdictionCode;
-        bool requiresApproval;
-        bool approved;
-        address approver;
-    }
+    uint8 private constant CATEGORY_BUCKETS = 8;
+    uint8 private constant MAX_AUDITORS     = 5; // Hard cap for external human auditors
 
-    uint8 private constant PURPOSE_BUCKETS = 12;
-    uint8 private constant RISK_BUCKETS = 4;
-    uint8 private constant JURISDICTION_BUCKETS = 5;
-    uint8 private constant COUNTERPARTY_BUCKETS = 5;
+    // ─── State Variables ─────────────────────────────────────────────────────
 
-    address public immutable confidentialToken;
+    // NOTE: not immutable — EIP-1167 clone pattern requires mutable state
+    address public confidentialToken;
     address public owner;
-    bool public authThresholdsConfigured;
     address public reviewTestRegistry;
+    bool    public authThresholdsConfigured;
 
+    // Reentrancy guard
+    bool private _locked;
+
+    // DoA thresholds — set exclusively by owner (onlyOwner)
     euint64 private _managerThreshold;
     euint64 private _directorThreshold;
     euint64 private _boardThreshold;
 
+    // Storage
     PaymentRecord[] private _payments;
-    Finding[] private _findings;
-    address[] private _auditors;
+    Finding[]       private _findings;
+    address[]       private _auditors; // External human auditors only; capped at MAX_AUDITORS
 
-    mapping(address auditor => AuditorAccess access) public auditorAccess;
-    mapping(uint8 purposeCode => euint64 total) private _purposeTotals;
-    mapping(uint8 riskTier => euint64 total) private _riskTierTotals;
-    mapping(uint8 counterpartyType => euint64 total) private _counterpartyTotals;
-    mapping(uint8 jurisdictionCode => euint64 total) private _jurisdictionTotals;
-    mapping(address recipient => euint64 total) private _recipientTotals;
-    mapping(address auditor => bool listed) private _auditorListed;
-    mapping(address auditor => uint256[] findingIds) private _auditorFindings;
+    // Mappings
+    mapping(address auditor  => AuditorAccess access)   public  auditorAccess;
+    mapping(uint8   category => euint64 total)           private _categoryTotals;
+    mapping(address recipient => euint64 total)          private _recipientTotals;
+    mapping(address auditor  => bool listed)             private _auditorListed;
+    mapping(address auditor  => uint256[] findingIds)    private _auditorFindings;
+
+    // ─── Events ──────────────────────────────────────────────────────────────
 
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
     event AuditorAccessSet(address indexed auditor, AuditorAccess access);
-    event AuthTierThresholdsSet(address indexed auditor);
+    event AuthThresholdsSet(address indexed by);
     event PaymentRecorded(uint256 indexed paymentId, address indexed sender, address indexed recipient);
-    event DocumentAttached(uint256 indexed paymentId, bytes32 docHash);
     event PaymentApproved(uint256 indexed paymentId, address indexed approver);
     event FindingCreated(uint256 indexed findingId, uint256 indexed paymentId, uint8 testType, uint8 severity);
     event ReviewTestRegistrySet(address indexed registry);
 
+    // ─── Errors ──────────────────────────────────────────────────────────────
+
     error NotOwner();
     error NotToken();
+    error NotReviewRegistry();
     error InvalidAddress();
-    error InvalidEnumValue();
     error ThresholdsNotConfigured();
     error Unauthorized();
     error PaymentNotFound();
-    error DocumentAlreadyAttached();
-    error SelfApproval();
     error PaymentAlreadyApproved();
+    error AlreadyInitialized();
+    error AuditorLimitReached();
+    error Reentrant();
+
+    // ─── Modifiers ───────────────────────────────────────────────────────────
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -188,12 +176,31 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         _;
     }
 
-    constructor(address confidentialToken_) {
-        if (confidentialToken_ == address(0)) revert InvalidAddress();
-        confidentialToken = confidentialToken_;
-        owner = msg.sender;
-        emit OwnerTransferred(address(0), msg.sender);
+    modifier nonReentrant() {
+        if (_locked) revert Reentrant();
+        _locked = true;
+        _;
+        _locked = false;
     }
+
+    // ─── Initialization (Clone Pattern) ──────────────────────────────────────
+
+    /// @notice Lock the implementation contract so it can never be initialized directly.
+    constructor() {
+        confidentialToken = address(1); // non-zero sentinel — prevents initialization
+    }
+
+    /// @notice Called once by ComplyrFactory after cloning. Replaces the constructor.
+    function initialize(address confidentialToken_, address initialOwner) external {
+        if (confidentialToken != address(0)) revert AlreadyInitialized();
+        if (confidentialToken_ == address(0)) revert InvalidAddress();
+        if (initialOwner == address(0)) revert InvalidAddress();
+        confidentialToken = confidentialToken_;
+        owner = initialOwner;
+        emit OwnerTransferred(address(0), initialOwner);
+    }
+
+    // ─── Admin Functions ─────────────────────────────────────────────────────
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidAddress();
@@ -201,15 +208,19 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         owner = newOwner;
     }
 
-    function setReviewTestRegistry(address _reviewTestRegistry) external onlyOwner {
-        if (_reviewTestRegistry == address(0)) revert InvalidAddress();
-        reviewTestRegistry = _reviewTestRegistry;
-        emit ReviewTestRegistrySet(_reviewTestRegistry);
+    function setReviewTestRegistry(address registry) external onlyOwner {
+        if (registry == address(0)) revert InvalidAddress();
+        reviewTestRegistry = registry;
+        emit ReviewTestRegistrySet(registry);
     }
 
+    /// @notice Grants an external human auditor access to payment data.
+    ///         ReviewTestRegistry access is handled separately — do NOT pass it here.
+    ///         Cap: MAX_AUDITORS (5) external auditors per registry.
     function setAuditorAccess(address auditor, AuditorAccess access) external onlyOwner {
         if (auditor == address(0)) revert InvalidAddress();
         if (!_auditorListed[auditor]) {
+            if (_auditors.length >= MAX_AUDITORS) revert AuditorLimitReached();
             _auditorListed[auditor] = true;
             _auditors.push(auditor);
         }
@@ -217,94 +228,82 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit AuditorAccessSet(auditor, access);
     }
 
-    /**
-     * ACL grants:
-     * - address(this): required because future payment auth-tier derivation compares payment amounts with these handles.
-     * - msg.sender: lets the configuring auditor re-encrypt/decrypt their own thresholds for local verification.
-     */
+    /// @notice Sets the business's Delegation of Authority thresholds.
+    ///         onlyOwner — this is an internal control policy, not auditor methodology.
+    ///         Must be called before any payment can be recorded.
     function setAuthTierThresholds(
         externalEuint64 managerThreshold,
         externalEuint64 directorThreshold,
         externalEuint64 boardThreshold,
         bytes calldata inputProof
-    ) external {
-        AuditorAccess access = auditorAccess[msg.sender];
-        if (msg.sender != owner && access != AuditorAccess.ANALYTICS && access != AuditorAccess.FULL) revert Unauthorized();
-
-        _managerThreshold = FHE.fromExternal(managerThreshold, inputProof);
+    ) external onlyOwner {
+        _managerThreshold  = FHE.fromExternal(managerThreshold,  inputProof);
         _directorThreshold = FHE.fromExternal(directorThreshold, inputProof);
-        _boardThreshold = FHE.fromExternal(boardThreshold, inputProof);
+        _boardThreshold    = FHE.fromExternal(boardThreshold,    inputProof);
 
         FHE.allowThis(_managerThreshold);
         FHE.allowThis(_directorThreshold);
         FHE.allowThis(_boardThreshold);
-        FHE.allow(_managerThreshold, msg.sender);
+        FHE.allow(_managerThreshold,  msg.sender);
         FHE.allow(_directorThreshold, msg.sender);
-        FHE.allow(_boardThreshold, msg.sender);
+        FHE.allow(_boardThreshold,    msg.sender);
 
         authThresholdsConfigured = true;
-        emit AuthTierThresholdsSet(msg.sender);
+        emit AuthThresholdsSet(msg.sender);
     }
 
-    function recordPayment(
-        externalEuint64 amount,
-        bytes calldata amountProof,
-        ExternalAuditFields calldata fields
-    ) external returns (uint256 paymentId) {
-        euint64 encryptedAmount = FHE.fromExternal(amount, amountProof);
-        euint8 purposeCode = FHE.fromExternal(fields.purposeCode, fields.inputProof);
-        euint8 submittedRiskTier = FHE.fromExternal(fields.riskTier, fields.inputProof);
-        euint8 counterpartyType = FHE.fromExternal(fields.counterpartyType, fields.inputProof);
+    // ─── Payment Entry Point (sole path — no self-reporting) ─────────────────
 
-        return
-            _recordPayment(
-                msg.sender,
-                encryptedAmount,
-                CallbackAuditFields({
-                    purposeCode: purposeCode,
-                    riskTier: submittedRiskTier,
-                    counterpartyType: counterpartyType,
-                    recipient: fields.recipient,
-                    referenceId: fields.referenceId,
-                    docHash: fields.docHash,
-                    jurisdictionCode: fields.jurisdictionCode,
-                    requiresApproval: fields.requiresApproval,
-                    approved: fields.approved,
-                    approver: fields.approver
-                })
-            );
-    }
-
+    /// @notice Called by ConfidentialUSDC after a confidentialTransferAndCallWithAudit.
+    ///         The amount handle is pulled from the actual token transfer — not submitted by caller.
     function onConfidentialTransferReceived(
         address,
         address from,
         euint64 amount,
         bytes calldata data
-    ) external override returns (ebool) {
+    ) external override nonReentrant returns (ebool) {
         if (msg.sender != confidentialToken) revert NotToken();
         CallbackAuditFields memory fields = abi.decode(data, (CallbackAuditFields));
         _recordPayment(from, amount, fields);
         return FHE.asEbool(true);
     }
 
-    function attachDocument(uint256 paymentId, bytes32 docHash) external paymentExists(paymentId) {
-        PaymentRecord storage payment = _payments[paymentId];
-        if (msg.sender != payment.sender) revert Unauthorized();
-        if (payment.docHash != bytes32(0)) revert DocumentAlreadyAttached();
-        payment.docHash = docHash;
-        emit DocumentAttached(paymentId, docHash);
-    }
+    // ─── Payment Approval ────────────────────────────────────────────────────
 
+    /// @notice The only path to set approved=true and approver on a payment.
+    ///         Caller must not be the payment sender (segregation of duties).
+    ///         ReviewTestRegistry checks for SoD violations via createSodFinding separately.
     function approvePayment(uint256 paymentId) external paymentExists(paymentId) {
         PaymentRecord storage payment = _payments[paymentId];
         if (payment.approved) revert PaymentAlreadyApproved();
-        if (msg.sender == payment.sender) revert SelfApproval();
-        if (payment.approver != address(0) && msg.sender != payment.approver) revert Unauthorized();
+
+        // SoD check: if sender is approving their own payment, create a finding directly
+        if (msg.sender == payment.sender && reviewTestRegistry != address(0)) {
+            IReviewTestRegistry(reviewTestRegistry).createSodFinding(paymentId, msg.sender);
+        }
 
         payment.approved = true;
         payment.approver = msg.sender;
         emit PaymentApproved(paymentId, msg.sender);
     }
+
+    // ─── Finding Entry Point (called by ReviewTestRegistry only) ─────────────
+
+    /// @notice Creates a finding. Called by the paired ReviewTestRegistry after Gateway
+    ///         decryption confirms a test was triggered.
+    function recordFinding(
+        uint256 paymentId,
+        uint8   testType,
+        uint8   severity,
+        euint64 flaggedHandle,
+        bytes32 narrativeHash,
+        address auditor
+    ) external {
+        if (msg.sender != reviewTestRegistry) revert NotReviewRegistry();
+        _createFinding(paymentId, testType, severity, flaggedHandle, narrativeHash, auditor);
+    }
+
+    // ─── View Functions ──────────────────────────────────────────────────────
 
     function paymentCount() external view returns (uint256) {
         return _payments.length;
@@ -322,9 +321,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         return _auditorFindings[auditor][index];
     }
 
-    function getPaymentMeta(
-        uint256 paymentId
-    )
+    /// @notice Returns plaintext metadata for a payment.
+    ///         Access controlled: owner, sender, recipient, FULL auditors, or ReviewTestRegistry.
+    function getPaymentMeta(uint256 paymentId)
         external
         view
         paymentExists(paymentId)
@@ -332,85 +331,67 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             address sender,
             address recipient,
             address approver,
-            bytes32 referenceId,
-            bytes32 docHash,
-            uint32 blockNumber,
-            uint8 jurisdictionCode,
-            bool requiresApproval,
-            bool approved
+            bytes32 invoiceHash,
+            bytes32 poHash,
+            uint32  blockNumber,
+            bool    approved
         )
     {
         PaymentRecord storage payment = _payments[paymentId];
+        if (!_canReadPayment(payment, msg.sender)) revert Unauthorized();
         return (
             payment.sender,
             payment.recipient,
             payment.approver,
-            payment.referenceId,
-            payment.docHash,
+            payment.invoiceHash,
+            payment.poHash,
             payment.blockNumber,
-            payment.jurisdictionCode,
-            payment.requiresApproval,
             payment.approved
         );
     }
 
-    function getPaymentHandles(
-        uint256 paymentId
-    )
+    /// @notice Returns the encrypted handles for a payment.
+    ///         Access controlled: owner, sender, recipient, FULL auditors, or ReviewTestRegistry.
+    function getPaymentHandles(uint256 paymentId)
         external
         view
         paymentExists(paymentId)
-        returns (euint64 amount, euint8 purposeCode, euint8 riskTier, euint8 counterpartyType, euint8 authTier)
+        returns (euint64 amount, euint8 category, euint8 authLevel)
     {
         PaymentRecord storage payment = _payments[paymentId];
         if (!_canReadPayment(payment, msg.sender)) revert Unauthorized();
-        return (payment.amount, payment.purposeCode, payment.riskTier, payment.counterpartyType, payment.authTier);
+        return (payment.amount, payment.category, payment.authLevel);
     }
 
-    function getPurposeTotal(uint8 purposeCode) external view returns (euint64) {
-        if (purposeCode >= PURPOSE_BUCKETS) revert InvalidEnumValue();
+    /// @notice Returns the encrypted running total for a GL category.
+    ///         Access: ANALYTICS or FULL auditors, or the owner.
+    function getCategoryTotal(uint8 category) external view returns (euint64) {
+        if (category >= CATEGORY_BUCKETS) revert InvalidAddress(); // reusing error for range check
         if (!_canReadAnalytics(msg.sender)) revert Unauthorized();
-        return _purposeTotals[purposeCode];
+        return _categoryTotals[category];
     }
 
-    function getRiskTierTotal(uint8 riskTier) external view returns (euint64) {
-        if (riskTier >= RISK_BUCKETS) revert InvalidEnumValue();
-        if (!_canReadAnalytics(msg.sender)) revert Unauthorized();
-        return _riskTierTotals[riskTier];
-    }
-
-    function getJurisdictionTotal(uint8 jurisdictionCode) external view returns (euint64) {
-        if (jurisdictionCode >= JURISDICTION_BUCKETS) revert InvalidEnumValue();
-        if (!_canReadAnalytics(msg.sender)) revert Unauthorized();
-        return _jurisdictionTotals[jurisdictionCode];
-    }
-
-    function getCounterpartyTotal(uint8 counterpartyType) external view returns (euint64) {
-        if (counterpartyType >= COUNTERPARTY_BUCKETS) revert InvalidEnumValue();
-        if (!_canReadAnalytics(msg.sender)) revert Unauthorized();
-        return _counterpartyTotals[counterpartyType];
-    }
-
+    /// @notice Returns the encrypted running total for a recipient address.
     function getRecipientTotal(address recipient) external view returns (euint64) {
         if (!_canReadAnalytics(msg.sender) && msg.sender != recipient) revert Unauthorized();
         return _recipientTotals[recipient];
     }
 
-    function getFinding(
-        uint256 findingId
-    )
+    /// @notice Returns finding metadata. Access: owner, payment sender/recipient, or FULL auditor.
+    function getFinding(uint256 findingId)
         external
         view
         returns (
             uint256 paymentId,
-            uint8 testType,
-            uint8 severity,
+            uint8   testType,
+            uint8   severity,
             euint64 flaggedHandle,
-            uint32 triggeredAtBlock,
+            uint32  triggeredAtBlock,
             bytes32 narrativeHash,
-            bool escalated
+            bool    escalated
         )
     {
+        if (findingId >= _findings.length) revert PaymentNotFound();
         Finding storage finding = _findings[findingId];
         PaymentRecord storage payment = _payments[finding.paymentId];
         if (!_canReadPayment(payment, msg.sender)) revert Unauthorized();
@@ -425,62 +406,34 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         );
     }
 
-    function riskFloorFromJurisdiction(uint8 jurisdictionCode) public pure returns (uint8) {
-        if (jurisdictionCode == uint8(JurisdictionCode.SANCTIONED)) return uint8(RiskTier.WATCHLIST);
-        if (jurisdictionCode == uint8(JurisdictionCode.HIGH_RISK)) return uint8(RiskTier.HIGH);
-        if (jurisdictionCode == uint8(JurisdictionCode.FATF_GREY)) return uint8(RiskTier.MEDIUM);
-        if (jurisdictionCode < JURISDICTION_BUCKETS) return uint8(RiskTier.LOW);
-        revert InvalidEnumValue();
-    }
+    // ─── Internal: Payment Recording ─────────────────────────────────────────
 
     function _recordPayment(
         address sender,
         euint64 amount,
         CallbackAuditFields memory fields
-    ) private returns (uint256 paymentId) {
+    ) private {
         if (!authThresholdsConfigured) revert ThresholdsNotConfigured();
         if (fields.recipient == address(0)) revert InvalidAddress();
-        _validatePlainEnums(fields.jurisdictionCode);
 
-        euint8 effectiveRiskTier = _clampRiskTier(fields.jurisdictionCode, fields.riskTier);
-        euint8 derivedAuthTier = _deriveAuthTier(amount);
+        euint8 derivedAuthLevel = _deriveAuthLevel(amount);
 
-        paymentId = _payments.length;
-        _payments.push(
-            PaymentRecord({
-                amount: amount,
-                purposeCode: fields.purposeCode,
-                riskTier: effectiveRiskTier,
-                counterpartyType: fields.counterpartyType,
-                authTier: derivedAuthTier,
-                sender: sender,
-                recipient: fields.recipient,
-                approver: fields.approver,
-                referenceId: fields.referenceId,
-                docHash: fields.docHash,
-                blockNumber: uint32(block.number),
-                jurisdictionCode: fields.jurisdictionCode,
-                requiresApproval: fields.requiresApproval,
-                approved: fields.approved
-            })
-        );
+        uint256 paymentId = _payments.length;
+        _payments.push(PaymentRecord({
+            amount:      amount,
+            category:    fields.category,
+            authLevel:   derivedAuthLevel,
+            sender:      sender,
+            recipient:   fields.recipient,
+            approver:    address(0),   // always address(0) at creation
+            approved:    false,        // always false at creation
+            invoiceHash: fields.invoiceHash,
+            poHash:      fields.poHash,
+            blockNumber: uint32(block.number)
+        }));
 
         _allowPaymentHandles(_payments[paymentId]);
-        _updateRollups(
-            amount,
-            fields.purposeCode,
-            effectiveRiskTier,
-            fields.counterpartyType,
-            fields.jurisdictionCode,
-            fields.recipient
-        );
-
-        if (fields.requiresApproval && !fields.approved) {
-            _createFinding(paymentId, 10, 2, amount, bytes32(0));
-        }
-        if (fields.approved && fields.approver == sender) {
-            _createFinding(paymentId, 11, 3, amount, bytes32(0));
-        }
+        _updateRollups(amount, fields.category, fields.recipient);
 
         if (reviewTestRegistry != address(0)) {
             IReviewTestRegistry(reviewTestRegistry).evaluateAll(paymentId);
@@ -489,105 +442,81 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit PaymentRecorded(paymentId, sender, fields.recipient);
     }
 
-    function _validatePlainEnums(uint8 jurisdictionCode) private pure {
-        if (jurisdictionCode >= JURISDICTION_BUCKETS) revert InvalidEnumValue();
-    }
+    // ─── Internal: FHE Derivations ───────────────────────────────────────────
 
-    function _deriveAuthTier(euint64 amount) private returns (euint8) {
-        return
+    /// @notice Derives the required authorization level from the payment amount.
+    ///         Pure FHE — never decrypted, stored as a handle for test comparisons.
+    function _deriveAuthLevel(euint64 amount) private returns (euint8) {
+        return FHE.select(
+            FHE.gt(amount, _boardThreshold),
+            FHE.asEuint8(uint8(AuthLevel.BOARD)),
             FHE.select(
-                FHE.gt(amount, _boardThreshold),
-                FHE.asEuint8(uint8(AuthTier.BOARD)),
+                FHE.gt(amount, _directorThreshold),
+                FHE.asEuint8(uint8(AuthLevel.DIRECTOR)),
                 FHE.select(
-                    FHE.gt(amount, _directorThreshold),
-                    FHE.asEuint8(uint8(AuthTier.DIRECTOR)),
-                    FHE.select(
-                        FHE.gt(amount, _managerThreshold),
-                        FHE.asEuint8(uint8(AuthTier.MANAGER)),
-                        FHE.asEuint8(uint8(AuthTier.ROUTINE))
-                    )
+                    FHE.gt(amount, _managerThreshold),
+                    FHE.asEuint8(uint8(AuthLevel.MANAGER)),
+                    FHE.asEuint8(uint8(AuthLevel.ROUTINE))
                 )
-            );
+            )
+        );
     }
 
-    function _clampRiskTier(uint8 jurisdictionCode, euint8 submittedRiskTier) private returns (euint8) {
-        euint8 floor = FHE.asEuint8(riskFloorFromJurisdiction(jurisdictionCode));
-        return FHE.select(FHE.gt(floor, submittedRiskTier), floor, submittedRiskTier);
-    }
+    // ─── Internal: Rollups ───────────────────────────────────────────────────
 
-    function _updateRollups(
-        euint64 amount,
-        euint8 purposeCode,
-        euint8 riskTier,
-        euint8 counterpartyType,
-        uint8 jurisdictionCode,
-        address recipient
-    ) private {
+    /// @notice Updates encrypted running totals for category and recipient dimensions.
+    ///         Uses FHE.select loop for category (no plaintext leakage of which bucket was hit).
+    function _updateRollups(euint64 amount, euint8 category, address recipient) private {
         euint64 zero = FHE.asEuint64(0);
 
-        for (uint8 i = 0; i < PURPOSE_BUCKETS; i++) {
-            euint64 delta = FHE.select(FHE.eq(purposeCode, FHE.asEuint8(i)), amount, zero);
-            _purposeTotals[i] = FHE.add(_purposeTotals[i], delta);
-            FHE.allowThis(_purposeTotals[i]);
-            _allowAnalyticsHandle(_purposeTotals[i]);
+        // Category rollup — 8 FHE iterations (vs old 22 iterations = 64% reduction)
+        for (uint8 i = 0; i < CATEGORY_BUCKETS; i++) {
+            euint64 delta = FHE.select(FHE.eq(category, FHE.asEuint8(i)), amount, zero);
+            _categoryTotals[i] = FHE.add(_categoryTotals[i], delta);
+            FHE.allowThis(_categoryTotals[i]);
+            _allowAnalyticsHandle(_categoryTotals[i]);
         }
 
-        for (uint8 i = 0; i < RISK_BUCKETS; i++) {
-            euint64 delta = FHE.select(FHE.eq(riskTier, FHE.asEuint8(i)), amount, zero);
-            _riskTierTotals[i] = FHE.add(_riskTierTotals[i], delta);
-            FHE.allowThis(_riskTierTotals[i]);
-            _allowAnalyticsHandle(_riskTierTotals[i]);
-        }
-
-        for (uint8 i = 0; i < COUNTERPARTY_BUCKETS; i++) {
-            euint64 delta = FHE.select(FHE.eq(counterpartyType, FHE.asEuint8(i)), amount, zero);
-            _counterpartyTotals[i] = FHE.add(_counterpartyTotals[i], delta);
-            FHE.allowThis(_counterpartyTotals[i]);
-            _allowAnalyticsHandle(_counterpartyTotals[i]);
-        }
-
-        _jurisdictionTotals[jurisdictionCode] = FHE.add(_jurisdictionTotals[jurisdictionCode], amount);
-        FHE.allowThis(_jurisdictionTotals[jurisdictionCode]);
-        _allowAnalyticsHandle(_jurisdictionTotals[jurisdictionCode]);
-
+        // Recipient rollup — direct add (recipient is plaintext)
         _recipientTotals[recipient] = FHE.add(_recipientTotals[recipient], amount);
         FHE.allowThis(_recipientTotals[recipient]);
         FHE.allow(_recipientTotals[recipient], recipient);
         _allowAnalyticsHandle(_recipientTotals[recipient]);
     }
 
-    /**
-     * ACL grants:
-     * - address(this): required for future FHE computations over stored payment fields.
-     * - sender and recipient: each party can re-encrypt/decrypt its own payment record.
-     * - analytics/full auditors: can inspect encrypted classifications; full auditors can inspect amount handles.
-     */
+    // ─── Internal: ACL Grants ────────────────────────────────────────────────
+
+    /// @notice Issues FHE ACL grants for all encrypted fields on a newly recorded payment.
+    ///         ReviewTestRegistry gets direct grants (outside the auditor loop) so it never
+    ///         occupies one of the 5 external auditor slots.
     function _allowPaymentHandles(PaymentRecord storage payment) private {
+        // Contract self-access — needed for future FHE ops on stored handles
         FHE.allowThis(payment.amount);
-        FHE.allowThis(payment.purposeCode);
-        FHE.allowThis(payment.riskTier);
-        FHE.allowThis(payment.counterpartyType);
-        FHE.allowThis(payment.authTier);
+        FHE.allowThis(payment.category);
+        FHE.allowThis(payment.authLevel);
 
-        FHE.allow(payment.amount, payment.sender);
-        FHE.allow(payment.amount, payment.recipient);
-        FHE.allow(payment.purposeCode, payment.sender);
-        FHE.allow(payment.purposeCode, payment.recipient);
-        FHE.allow(payment.riskTier, payment.sender);
-        FHE.allow(payment.riskTier, payment.recipient);
-        FHE.allow(payment.counterpartyType, payment.sender);
-        FHE.allow(payment.counterpartyType, payment.recipient);
-        FHE.allow(payment.authTier, payment.sender);
-        FHE.allow(payment.authTier, payment.recipient);
+        // Sender and recipient can decrypt their own payment
+        FHE.allow(payment.amount,    payment.sender);
+        FHE.allow(payment.amount,    payment.recipient);
+        FHE.allow(payment.category,  payment.sender);
+        FHE.allow(payment.category,  payment.recipient);
+        FHE.allow(payment.authLevel, payment.sender);
+        FHE.allow(payment.authLevel, payment.recipient);
 
+        // ReviewTestRegistry — direct grant outside auditor loop (not in _auditors array)
+        if (reviewTestRegistry != address(0)) {
+            FHE.allow(payment.amount,    reviewTestRegistry);
+            FHE.allow(payment.category,  reviewTestRegistry);
+            FHE.allow(payment.authLevel, reviewTestRegistry);
+        }
+
+        // External human auditors (capped at 5)
         for (uint256 i = 0; i < _auditors.length; i++) {
             address auditor = _auditors[i];
             AuditorAccess access = auditorAccess[auditor];
             if (access == AuditorAccess.ANALYTICS || access == AuditorAccess.FULL) {
-                FHE.allow(payment.purposeCode, auditor);
-                FHE.allow(payment.riskTier, auditor);
-                FHE.allow(payment.counterpartyType, auditor);
-                FHE.allow(payment.authTier, auditor);
+                FHE.allow(payment.category,  auditor);
+                FHE.allow(payment.authLevel, auditor);
             }
             if (access == AuditorAccess.FULL) {
                 FHE.allow(payment.amount, auditor);
@@ -595,11 +524,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         }
     }
 
-    /**
-     * ACL grants:
-     * - address(this): assigned by the caller before this helper for future threshold tests.
-     * - analytics/full auditors: can decrypt aggregate totals without receiving every raw payment amount.
-     */
+    /// @notice Issues FHE ACL grants for an analytics handle (rollup total) to all
+    ///         ANALYTICS/FULL auditors.
     function _allowAnalyticsHandle(euint64 handle) private {
         for (uint256 i = 0; i < _auditors.length; i++) {
             address auditor = _auditors[i];
@@ -610,54 +536,69 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         }
     }
 
+    // ─── Internal: Finding Creation ──────────────────────────────────────────
+
+    /// @notice Creates a finding and links it to the triggering auditor only.
+    ///         flaggedHandle ACL: contract + payment parties + triggering auditor.
+    ///         SIGNAL/ANALYTICS auditors see the finding metadata but not the handle.
     function _createFinding(
         uint256 paymentId,
-        uint8 testType,
-        uint8 severity,
+        uint8   testType,
+        uint8   severity,
         euint64 flaggedHandle,
-        bytes32 narrativeHash
+        bytes32 narrativeHash,
+        address triggeringAuditor
     ) private {
         uint256 findingId = _findings.length;
-        _findings.push(
-            Finding({
-                paymentId: paymentId,
-                testType: testType,
-                severity: severity,
-                flaggedHandle: flaggedHandle,
-                triggeredAtBlock: uint32(block.number),
-                narrativeHash: narrativeHash,
-                escalated: false
-            })
-        );
+        _findings.push(Finding({
+            paymentId:        paymentId,
+            testType:         testType,
+            severity:         severity,
+            flaggedHandle:    flaggedHandle,
+            triggeredAtBlock: uint32(block.number),
+            narrativeHash:    narrativeHash,
+            escalated:        false
+        }));
 
         PaymentRecord storage payment = _payments[paymentId];
         FHE.allowThis(flaggedHandle);
         FHE.allow(flaggedHandle, payment.sender);
         FHE.allow(flaggedHandle, payment.recipient);
+        FHE.allow(flaggedHandle, triggeringAuditor);
 
+        // All auditors with at least SIGNAL access see this finding in their feed
         for (uint256 i = 0; i < _auditors.length; i++) {
-            address auditor = _auditors[i];
-            if (auditorAccess[auditor] != AuditorAccess.NONE) {
-                _auditorFindings[auditor].push(findingId);
-                if (auditorAccess[auditor] == AuditorAccess.FULL) {
-                    FHE.allow(flaggedHandle, auditor);
-                }
+            if (auditorAccess[_auditors[i]] != AuditorAccess.NONE) {
+                _auditorFindings[_auditors[i]].push(findingId);
             }
+        }
+        // Also add to the triggering auditor (in case they're not in _auditors — e.g. ReviewTestRegistry itself for SoD)
+        if (!_auditorListed[triggeringAuditor]) {
+            _auditorFindings[triggeringAuditor].push(findingId);
         }
 
         emit FindingCreated(findingId, paymentId, testType, severity);
     }
 
+    // ─── Internal: Access Control ────────────────────────────────────────────
+
+    /// @notice Checks if an account can read a specific payment's data.
+    ///         ReviewTestRegistry gets unconditional read access for test evaluation.
     function _canReadPayment(PaymentRecord storage payment, address account) private view returns (bool) {
         return
             account == owner ||
             account == payment.sender ||
             account == payment.recipient ||
+            account == reviewTestRegistry ||
             auditorAccess[account] == AuditorAccess.FULL;
     }
 
     function _canReadAnalytics(address account) private view returns (bool) {
         AuditorAccess access = auditorAccess[account];
-        return account == owner || access == AuditorAccess.ANALYTICS || access == AuditorAccess.FULL;
+        return
+            account == owner ||
+            account == reviewTestRegistry ||
+            access == AuditorAccess.ANALYTICS ||
+            access == AuditorAccess.FULL;
     }
 }
