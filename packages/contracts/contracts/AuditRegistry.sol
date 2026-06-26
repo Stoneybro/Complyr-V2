@@ -8,7 +8,7 @@ import {
     euint64,
     externalEuint64
 } from "@fhevm/solidity/lib/FHE.sol";
-import {ZamaEthereumConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
+import {ZamaEthereumConfig, ZamaConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
 import {ExternalAuditFields, CallbackAuditFields} from "./IComplyrTypes.sol";
 
 interface IConfidentialFungibleTokenReceiver {
@@ -23,6 +23,11 @@ interface IConfidentialFungibleTokenReceiver {
 interface IReviewTestRegistry {
     function evaluateAll(uint256 paymentId) external;
     function createSodFinding(uint256 paymentId, address auditor) external;
+}
+
+/// @notice Minimal interface for forwarding cUSDC to the actual recipient after audit recording.
+interface IConfidentialToken {
+    function confidentialTransfer(address to, euint64 amount) external returns (euint64);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +144,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     mapping(address recipient => euint64 total)          private _recipientTotals;
     mapping(address auditor  => bool listed)             private _auditorListed;
     mapping(address auditor  => uint256[] findingIds)    private _auditorFindings;
+    mapping(address approver => bool authorized)          public  authorizedApprovers;
 
     // ─── Events ──────────────────────────────────────────────────────────────
 
@@ -149,6 +155,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     event PaymentApproved(uint256 indexed paymentId, address indexed approver);
     event FindingCreated(uint256 indexed findingId, uint256 indexed paymentId, uint8 testType, uint8 severity);
     event ReviewTestRegistrySet(address indexed registry);
+    event ApproverAuthorizationSet(address indexed approver, bool authorized);
 
     // ─── Errors ──────────────────────────────────────────────────────────────
 
@@ -191,10 +198,17 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     }
 
     /// @notice Called once by ComplyrFactory after cloning. Replaces the constructor.
+    ///         Explicitly re-calls FHE.setCoprocessor because EIP-1167 clone proxies do not
+    ///         execute the implementation constructor — the clone starts with empty storage.
+    ///         Without this, every FHE.fromExternal() call reverts with 'unexpected amount of data'.
     function initialize(address confidentialToken_, address initialOwner) external {
         if (confidentialToken != address(0)) revert AlreadyInitialized();
         if (confidentialToken_ == address(0)) revert InvalidAddress();
         if (initialOwner == address(0)) revert InvalidAddress();
+
+        // Re-initialise the coprocessor for this clone's storage.
+        FHE.setCoprocessor(ZamaConfig.getEthereumCoprocessorConfig());
+
         confidentialToken = confidentialToken_;
         owner = initialOwner;
         emit OwnerTransferred(address(0), initialOwner);
@@ -212,6 +226,15 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         if (registry == address(0)) revert InvalidAddress();
         reviewTestRegistry = registry;
         emit ReviewTestRegistrySet(registry);
+    }
+
+    /// @notice Grants or revokes payment approval rights for a given address.
+    ///         Only authorized approvers can call approvePayment().
+    ///         onlyOwner — the business controls who holds approval authority.
+    function setAuthorizedApprover(address approver, bool authorized) external onlyOwner {
+        if (approver == address(0)) revert InvalidAddress();
+        authorizedApprovers[approver] = authorized;
+        emit ApproverAuthorizationSet(approver, authorized);
     }
 
     /// @notice Grants an external human auditor access to payment data.
@@ -274,10 +297,16 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     ///         Caller must not be the payment sender (segregation of duties).
     ///         ReviewTestRegistry checks for SoD violations via createSodFinding separately.
     function approvePayment(uint256 paymentId) external paymentExists(paymentId) {
+        // Access control: only addresses explicitly authorized by the business owner
+        // can approve payments. This prevents arbitrary wallets from flipping approved=true.
+        if (!authorizedApprovers[msg.sender]) revert Unauthorized();
+
         PaymentRecord storage payment = _payments[paymentId];
         if (payment.approved) revert PaymentAlreadyApproved();
 
-        // SoD check: if sender is approving their own payment, create a finding directly
+        // SoD check: if the authorized approver is also the payment sender,
+        // create a Segregation of Duties finding. Approval still goes through —
+        // this is a detective control, not a preventive block.
         if (msg.sender == payment.sender && reviewTestRegistry != address(0)) {
             IReviewTestRegistry(reviewTestRegistry).createSodFinding(paymentId, msg.sender);
         }
@@ -435,6 +464,16 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         _allowPaymentHandles(_payments[paymentId]);
         _updateRollups(amount, fields.category, fields.recipient);
 
+        // Forward the payment to the actual recipient.
+        // The AuditRegistry receives the full cUSDC amount from ConfidentialUSDC
+        // (it is the `to` address in the callback), records the audit entry, then
+        // immediately routes the funds onward. The AuditRegistry is a pass-through,
+        // not a custodian. The stored `payment.amount` handle remains a valid
+        // cryptographic reference to the transfer even after funds move on.
+        // FHE.allow(amount, address(this)) was already set by ConfidentialUSDC._transfer
+        // when it transferred to this contract, so FHE.isAllowed passes.
+        IConfidentialToken(confidentialToken).confidentialTransfer(fields.recipient, amount);
+
         if (reviewTestRegistry != address(0)) {
             IReviewTestRegistry(reviewTestRegistry).evaluateAll(paymentId);
         }
@@ -525,8 +564,15 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     }
 
     /// @notice Issues FHE ACL grants for an analytics handle (rollup total) to all
-    ///         ANALYTICS/FULL auditors.
+    ///         ANALYTICS/FULL auditors AND to ReviewTestRegistry.
+    ///         ReviewTestRegistry needs access to call FHE.gt(rollupHandle, testThreshold)
+    ///         inside evaluateAll() for CATEGORY_CONCENTRATION and RECIPIENT_CONCENTRATION tests.
     function _allowAnalyticsHandle(euint64 handle) private {
+        // ReviewTestRegistry always gets access — it needs to FHE.gt() these handles
+        if (reviewTestRegistry != address(0)) {
+            FHE.allow(handle, reviewTestRegistry);
+        }
+
         for (uint256 i = 0; i < _auditors.length; i++) {
             address auditor = _auditors[i];
             AuditorAccess access = auditorAccess[auditor];

@@ -119,26 +119,16 @@ contract ComplyrFactory {
         // 3. Wire: tell AuditRegistry which ReviewTestRegistry it works with
         IAuditRegistryInit(auditProxy).setReviewTestRegistry(reviewProxy);
 
-        // 4. Grant ReviewTestRegistry FULL access in AuditRegistry.
-        //    This allows ReviewTestRegistry to call getPaymentHandles/getPaymentMeta.
-        //    ReviewTestRegistry is NOT added to the _auditors array (it gets direct read
-        //    access via the reviewTestRegistry address check in _canReadPayment).
-        //    We use setAuditorAccess(reviewProxy, 3) here only to satisfy the auditorAccess
-        //    mapping that _isApprovedAuditor reads inside ReviewTestRegistry.
-        //    AuditRegistry.setAuditorAccess caps at MAX_AUDITORS — reviewProxy is the first
-        //    and only "system" entry; real auditors fill the remaining 4 slots (plus 1 more
-        //    since factory adds reviewProxy as auditor, effectively reserving 1 slot).
-        //
-        // NOTE: An alternative is to check msg.sender == reviewTestRegistry in
-        //       _isApprovedAuditor. That would avoid consuming an auditor slot entirely.
-        //       For V1 simplicity, we use the access mapping approach.
-        IAuditRegistryInit(auditProxy).setAuditorAccess(reviewProxy, 3); // 3 = FULL
+        // ReviewTestRegistry does NOT get setAuditorAccess called on it.
+        // Its read access is handled by the direct `account == reviewTestRegistry` check
+        // in AuditRegistry._canReadPayment and _canReadAnalytics. No auditor slot consumed.
+        // The 5-slot cap is exclusively for external human auditors.
 
-        // 5. Transfer ownership to the business — factory loses all admin rights
+        // 4. Transfer ownership to the business — factory loses all admin rights
         IAuditRegistryInit(auditProxy).transferOwnership(business);
         IReviewTestRegistryInit(reviewProxy).transferOwnership(business);
 
-        // 6. Record deployment
+        // 5. Record deployment
         registries[business] = BusinessRegistry({
             auditRegistry:      auditProxy,
             reviewTestRegistry: reviewProxy,

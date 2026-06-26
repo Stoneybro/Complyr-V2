@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {FHE, ebool, euint8, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
-import {ZamaEthereumConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
+import {ZamaEthereumConfig, ZamaConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IAuditRegistry — interface used by ReviewTestRegistry to read payment data
@@ -156,10 +156,20 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     }
 
     /// @notice Called once by ComplyrFactory after cloning. Replaces the constructor.
+    ///         Explicitly re-calls FHE.setCoprocessor because EIP-1167 clone proxies do not
+    ///         execute the implementation constructor — the clone starts with empty storage.
+    ///         Also sets maxActiveAuditors since it defaults to 0 (not 5) on a fresh clone.
     function initialize(address auditRegistry_, address initialOwner) external {
         if (address(auditRegistry) != address(0)) revert AlreadyInitialized();
         if (auditRegistry_ == address(0)) revert InvalidAddress();
         if (initialOwner == address(0)) revert InvalidAddress();
+
+        // Re-initialise the coprocessor for this clone's storage.
+        FHE.setCoprocessor(ZamaConfig.getEthereumCoprocessorConfig());
+
+        // Restore maxActiveAuditors default (uint256 storage slot is 0 on a fresh clone).
+        maxActiveAuditors = 5;
+
         auditRegistry = IAuditRegistry(auditRegistry_);
         owner = initialOwner;
         emit OwnerTransferred(address(0), initialOwner);
@@ -252,7 +262,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
             // ── Test 0: MATERIALITY ─────────────────────────────────────────
             // Assertion: Occurrence, Accuracy — "was this payment above examination threshold?"
-            _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MATERIALITY), amount);
+            _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MATERIALITY), amount, recipient);
 
             // ── Test 1: AUTHORIZATION_BREACH ────────────────────────────────
             // Assertion: Authorization — "does this payment need human authorization?"
@@ -264,7 +274,8 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
                     auditor,
                     paymentId,
                     uint8(TestType.AUTHORIZATION_BREACH),
-                    FHE.asEuint64(authLevel) // upcast: authLevel is euint8, function expects euint64
+                    FHE.asEuint64(authLevel), // upcast: authLevel is euint8, function expects euint64
+                    recipient
                 );
             }
 
@@ -277,7 +288,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
             // Assertion: Occurrence — "is there supporting documentation for this payment?"
             // Only run if invoiceHash is empty — no FHE cost if document was provided.
             if (invoiceHash == bytes32(0)) {
-                _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MISSING_EVIDENCE), amount);
+                _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MISSING_EVIDENCE), amount, recipient);
             }
 
             // ── Test 4: CATEGORY_CONCENTRATION ──────────────────────────────
@@ -287,7 +298,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
                 ReviewTest storage catTest = _tests[auditor][uint8(TestType.CATEGORY_CONCENTRATION)];
                 if (catTest.exists && catTest.priority != Priority.NONE) {
                     euint64 catTotal = auditRegistry.getCategoryTotal(catTest.scope);
-                    _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.CATEGORY_CONCENTRATION), catTotal);
+                    _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.CATEGORY_CONCENTRATION), catTotal, recipient);
                 }
             }
 
@@ -297,7 +308,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
                 ReviewTest storage recTest = _tests[auditor][uint8(TestType.RECIPIENT_CONCENTRATION)];
                 if (recTest.exists && recTest.priority != Priority.NONE) {
                     euint64 recipientTotal = auditRegistry.getRecipientTotal(recipient);
-                    _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.RECIPIENT_CONCENTRATION), recipientTotal);
+                    _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.RECIPIENT_CONCENTRATION), recipientTotal, recipient);
                 }
             }
 
@@ -416,15 +427,18 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
     /// @notice Runs a single FHE comparison test and stores the encrypted result.
     ///         Also stores the tested value for use as a flaggedHandle in Phase 2.
+    ///         recipient is passed through to _shouldRun so MONITORING frequency
+    ///         gates work correctly (count-based per recipient).
     function _evaluateEncryptedTest(
         address auditor,
         uint256 paymentId,
         uint8   testType,
-        euint64 valueToTest
+        euint64 valueToTest,
+        address recipient
     ) private {
         ReviewTest storage testConfig = _tests[auditor][testType];
         if (!testConfig.exists || testConfig.priority == Priority.NONE) return;
-        if (!_shouldRun(testConfig, auditor, address(0))) return;
+        if (!_shouldRun(testConfig, auditor, recipient)) return;
 
         ebool result = FHE.gt(valueToTest, testConfig.threshold);
 
