@@ -5,17 +5,7 @@ import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isConnected, isConnecting, isReconnecting } = useAccount();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Prevent hydration mismatch by not rendering anything until mounted
-  if (!mounted) {
-    return null;
-  }
+  const { isConnected } = useAccount();
 
   if (!isConnected) {
     return (

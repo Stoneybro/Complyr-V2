@@ -13,7 +13,7 @@ export function useContacts(walletAddress?: string) {
 
 export function useCreateContact() {
   return useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: unknown) => {
       // Simulate network request
       await new Promise(resolve => setTimeout(resolve, 1000));
       return data;
@@ -23,7 +23,7 @@ export function useCreateContact() {
 
 export function useUpdateContact() {
   return useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: unknown) => {
       // Simulate network request
       await new Promise(resolve => setTimeout(resolve, 1000));
       return data;

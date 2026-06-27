@@ -95,7 +95,7 @@
 }
 
 :root {
-  --font-sans: "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-sans: var(--font-geist-sans), "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
   --font-geist-mono: "Cascadia Code", "SFMono-Regular", "Consolas", monospace;
   --font-outfit: var(--font-sans);
   --radius: 0.625rem;
@@ -130,6 +130,12 @@
   --sidebar-ring: oklch(0.708 0 0);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
+  --audit-encrypted: #315a7d;
+  --audit-cleared: #1f7a4d;
+  --audit-warning: #b7791f;
+  --audit-critical: #b91c1c;
+  --audit-gateway: #5b4bc4;
+  --audit-evidence: #475569;
 }
 
 .dark {
