@@ -47,51 +47,51 @@
   --radius-4xl: calc(var(--radius) + 16px);
   --font-heading: var(--font-sans);
 
-  /* New Homepage Design Tokens */
-  --color-inverse-on-surface: #f1f1f1;
-  --color-outline: #777777;
-  --color-tertiary-fixed: #5f5e5e;
-  --color-on-primary-container: #ffffff;
-  --color-on-tertiary-container: #ffffff;
-  --color-on-surface: #1b1b1b;
-  --color-surface-container: #eeeeee;
-  --color-surface-dim: #dadada;
-  --color-surface-tint: #5e5e5e;
-  --color-primary-fixed: #5e5e5e;
-  --color-on-background: #1b1b1b;
-  --color-inverse-primary: #c6c6c6;
-  --color-on-secondary-container: #1b1c1c;
-  --color-on-primary-fixed: #ffffff;
-  --color-on-secondary: #ffffff;
-  --color-secondary-fixed: #c8c6c6;
-  --color-primary-fixed-dim: #474747;
-  --color-tertiary-container: #767474;
-  --color-surface-container-low: #f3f3f3;
-  --color-error-container: #ffdad6;
-  --color-surface-container-highest: #e2e2e2;
-  --color-tertiary-fixed-dim: #474646;
-  --color-surface: #f9f9f9;
-  --color-primary-container: #3b3b3b;
-  --color-outline-variant: #c6c6c6;
-  --color-on-surface-variant: #474747;
-  --color-on-error: #ffffff;
-  --color-on-error-container: #410002;
-  --color-error: #ba1a1a;
-  --color-on-secondary-fixed-variant: #3b3b3b;
-  --color-on-primary: #e2e2e2;
-  --color-secondary-fixed-dim: #acabaa;
-  --color-on-tertiary-fixed-variant: #e5e2e1;
-  --color-on-tertiary-fixed: #ffffff;
-  --color-surface-bright: #f9f9f9;
-  --color-inverse-surface: #303030;
-  --color-tertiary: #3c3b3b;
-  --color-on-tertiary: #e5e2e1;
-  --color-surface-variant: #e2e2e2;
-  --color-on-primary-fixed-variant: #e2e2e2;
-  --color-on-secondary-fixed: #1b1c1c;
-  --color-surface-container-high: #e8e8e8;
-  --color-secondary-container: #d6d4d3;
-  --color-surface-container-lowest: #ffffff;
+  /* Homepage Design Tokens — Dark Mode */
+  --color-inverse-on-surface: #1b1b1b;
+  --color-outline: #ffffff;
+  --color-tertiary-fixed: #9a9898;
+  --color-on-primary-container: #1a1a1a;
+  --color-on-tertiary-container: #1a1a1a;
+  --color-on-surface: #ffffff;
+  --color-surface-container: #242424;
+  --color-surface-dim: #141414;
+  --color-surface-tint: #c6c6c6;
+  --color-primary-fixed: #c8c8c8;
+  --color-on-background: #ffffff;
+  --color-inverse-primary: #3c3c3c;
+  --color-on-secondary-container: #e3e3e3;
+  --color-on-primary-fixed: #1a1a1a;
+  --color-on-secondary: #1a1a1a;
+  --color-secondary-fixed: #3b3b3b;
+  --color-primary-fixed-dim: #a0a0a0;
+  --color-tertiary-container: #383636;
+  --color-surface-container-low: #1e1e1e;
+  --color-error-container: #8c1d18;
+  --color-surface-container-highest: #2f2f2f;
+  --color-tertiary-fixed-dim: #7a7878;
+  --color-surface: #121212;
+  --color-primary-container: #c4c4c4;
+  --color-outline-variant: #3a3a3a;
+  --color-on-surface-variant: #ffffff;
+  --color-on-error: #1a1a1a;
+  --color-on-error-container: #ffdad6;
+  --color-error: #ffb4ab;
+  --color-on-secondary-fixed-variant: #c4c4c4;
+  --color-on-primary: #1a1a1a;
+  --color-secondary-fixed-dim: #565656;
+  --color-on-tertiary-fixed-variant: #252525;
+  --color-on-tertiary-fixed: #1a1a1a;
+  --color-surface-bright: #2a2a2a;
+  --color-inverse-surface: #e3e3e3;
+  --color-tertiary: #c0bebe;
+  --color-on-tertiary: #252525;
+  --color-surface-variant: #2e2e2e;
+  --color-on-primary-fixed-variant: #2e2e2e;
+  --color-on-secondary-fixed: #e3e3e3;
+  --color-surface-container-high: #2a2a2a;
+  --color-secondary-container: #2a2a2a;
+  --color-surface-container-lowest: #0a0a0a;
 }
 
 :root {
@@ -134,7 +134,7 @@
 
 .dark {
   --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --foreground: oklch(1 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
@@ -144,7 +144,7 @@
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted-foreground: oklch(1 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
@@ -235,7 +235,7 @@
 
   .technical-grid {
     background-size: 40px 40px;
-    background-image: linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+    background-image: linear-gradient(to right, oklch(1 0 0 / 4%) 1px, transparent 1px), linear-gradient(to bottom, oklch(1 0 0 / 4%) 1px, transparent 1px);
   }
 
   .material-symbols-outlined {

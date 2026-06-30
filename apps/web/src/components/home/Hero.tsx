@@ -7,7 +7,8 @@ import { motion } from 'framer-motion';
 export default function Hero() {
   return (
     <section className="min-h-screen flex flex-col justify-center px-6 md:px-12 relative overflow-hidden technical-grid">
-      <div className="absolute inset-0 grain-overlay" />
+
+
       <div className="max-w-6xl w-full mx-auto z-10 flex flex-col items-center text-center">
         <motion.div 
           initial={{ scaleX: 0 }}
@@ -24,13 +25,13 @@ export default function Hero() {
         <div className="flex flex-col sm:flex-row gap-4">
           <Link
             href="/login"
-            className="bg-primary text-on-primary px-10 py-5 text-sm font-bold uppercase tracking-[0.2em] hover:bg-on-surface-variant hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
+            className="bg-white/10 border border-white/20 text-white px-10 py-5 text-sm font-bold uppercase tracking-[0.2em] hover:bg-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
           >
             Try the demo
           </Link>
           <Link
             href="/docs"
-            className="border border-primary text-primary px-10 py-5 text-sm font-bold uppercase tracking-[0.2em] hover:bg-surface-container-highest hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
+            className="border border-white/50 text-white px-10 py-5 text-sm font-bold uppercase tracking-[0.2em] hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
           >
             Read the docs
           </Link>
@@ -41,7 +42,7 @@ export default function Hero() {
         <motion.div 
           animate={{ opacity: [1, 0, 1] }}
           transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-          className="w-1.5 h-1.5 bg-black dark:bg-white" 
+          className="w-1.5 h-1.5 bg-on-surface" 
         />
       </div>
     </section>

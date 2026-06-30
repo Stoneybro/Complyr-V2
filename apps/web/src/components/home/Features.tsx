@@ -55,7 +55,7 @@ export default function Features() {
           {features.map((f) => (
             <div 
               key={f.title}
-              className="bg-surface p-10 flex flex-col justify-between min-h-[280px] hover:bg-surface-container-high transition-colors"
+              className="bg-surface p-10 flex flex-col justify-between min-h-[280px]"
             >
               <div>
                 <span className="material-symbols-outlined text-3xl mb-6 text-on-surface">{f.icon}</span>

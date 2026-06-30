@@ -1,6 +1,65 @@
 // Audit enum mappings - mirrors the Solidity enums
 // Used to convert between human-readable strings and contract enum values
 
+// ─── V2 Contract Enums (AuditRegistry.sol) ────────────────────────────────
+
+/// @notice GL-level payment categories — matches AuditRegistry.Category enum exactly.
+export const Category = {
+    OPEX:          0, // Operating expenses (supplies, utilities, general)
+    CAPEX:         1, // Capital expenditure (equipment, property)
+    PAYROLL:       2, // Salary, wages, benefits
+    PROFESSIONAL:  3, // Consulting, legal, advisory services
+    INTERCOMPANY:  4, // Related party / intra-group transfers
+    TAX:           5, // Tax payments to authorities
+    DEBT_SERVICE:  6, // Loan repayments, interest
+    OTHER:         7, // Unclassified
+} as const;
+
+export type CategoryValue = typeof Category[keyof typeof Category];
+
+export const CATEGORY_LABELS: Record<number, string> = {
+    0: "OPEX",
+    1: "CAPEX",
+    2: "PAYROLL",
+    3: "PROFESSIONAL",
+    4: "INTERCOMPANY",
+    5: "TAX",
+    6: "DEBT_SERVICE",
+    7: "OTHER",
+};
+
+export const CATEGORY_MAP: Record<string, number> = {
+    "": 0,
+    "OPEX": 0,
+    "CAPEX": 1,
+    "PAYROLL": 2,
+    "PROFESSIONAL": 3,
+    "INTERCOMPANY": 4,
+    "TAX": 5,
+    "DEBT_SERVICE": 6,
+    "OTHER": 7,
+};
+
+export function getCategoryOptions(): { value: string; label: string }[] {
+    return [
+        { value: "OPEX",         label: "Operating Expenses (OPEX)" },
+        { value: "CAPEX",        label: "Capital Expenditure (CAPEX)" },
+        { value: "PAYROLL",      label: "Payroll & Benefits" },
+        { value: "PROFESSIONAL", label: "Professional Services" },
+        { value: "INTERCOMPANY", label: "Intercompany Transfer" },
+        { value: "TAX",          label: "Tax Payment" },
+        { value: "DEBT_SERVICE", label: "Debt Service" },
+        { value: "OTHER",        label: "Other" },
+    ];
+}
+
+export function stringToCategory(category: string | undefined): number {
+    if (!category) return Category.OTHER;
+    return CATEGORY_MAP[category] ?? Category.OTHER;
+}
+
+// ─── V1 Legacy Enums (kept for contact store backward compatibility) ────────
+
 // Jurisdiction risk-region codes (must match AuditRegistry.JurisdictionCode)
 export const JurisdictionCode = {
     DOMESTIC: 0,

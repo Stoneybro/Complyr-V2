@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 
 export default function FinalCTA() {
   return (
-    <section className="py-40 px-6 md:px-12 bg-primary text-on-primary relative overflow-hidden">
+    <section className="py-40 px-6 md:px-12 bg-white text-on-primary relative overflow-hidden">
       <div className="absolute inset-0 grain-overlay"></div>
       <div className="max-w-4xl mx-auto text-center relative z-10">
         <motion.h2 

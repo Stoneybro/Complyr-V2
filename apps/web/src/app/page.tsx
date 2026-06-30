@@ -26,7 +26,6 @@ export default function HomePage() {
           <HowItWorks />
           <Features />
           <UseCases />
-          <Technology />
           <FinalCTA />
         </main>
         <Footer />
