@@ -53,6 +53,8 @@ type AppSidebarProps = {
   onNavigate: (view: AppView) => void;
   /** When true, all nav items are disabled until setup is complete */
   isLocked?: boolean;
+  /** Called synchronously before wagmi's disconnect() — use to wipe localStorage */
+  onBeforeDisconnect?: () => void;
 } & React.ComponentProps<typeof Sidebar>;
 
 export function AppSidebar({
@@ -60,17 +62,23 @@ export function AppSidebar({
   activeView,
   onNavigate,
   isLocked = false,
+  onBeforeDisconnect,
   ...props
 }: AppSidebarProps) {
   const router = useRouter();
   const { disconnect } = useDisconnect({
     mutation: {
       onSuccess: () => {
-        localStorage.removeItem("wallet-deployed");
         router.push("/");
       },
     },
   });
+
+  const handleDisconnect = () => {
+    // Clear our localStorage keys FIRST so wagmi can't auto-reconnect
+    onBeforeDisconnect?.();
+    disconnect();
+  };
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -167,7 +175,7 @@ export function AppSidebar({
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 shrink-0"
-                      onClick={() => disconnect()}
+                      onClick={() => handleDisconnect()}
                     >
                       <LogOut className="h-4 w-4" />
                     </Button>

@@ -26,10 +26,20 @@ export default function Page() {
   const [activeView, setActiveView] = useState<AppView>("payments");
   const [showContactForm, setShowContactForm] = useState(false);
   const [isDashboardReady, setIsDashboardReady] = useState(false);
+  const [clearSession, setClearSession] = useState<(() => void) | null>(null);
 
   const handlePhaseChange = useCallback((isReady: boolean) => {
     setIsDashboardReady(isReady);
   }, []);
+
+  const handleReady = useCallback(
+    ({ clearSession: cs }: { clearSession: () => void }) => {
+      // useState setter with function value needs to be wrapped to avoid
+      // React treating it as an updater function
+      setClearSession(() => cs);
+    },
+    []
+  );
 
   const meta = viewMeta[activeView];
 
@@ -42,6 +52,7 @@ export default function Page() {
           setShowContactForm(false);
         }}
         isLocked={!isDashboardReady}
+        onBeforeDisconnect={clearSession ?? undefined}
       />
 
       <SidebarInset>
@@ -52,7 +63,7 @@ export default function Page() {
           <div className="flex flex-1 items-center justify-between">
             <div>
               <h1 className="font-semibold">
-                {isDashboardReady ? meta.title : "Setup"}
+                {isDashboardReady ? meta.title : ""}
               </h1>
             </div>
             {/* Contextual actions — only shown when dashboard is ready */}
@@ -70,7 +81,7 @@ export default function Page() {
 
         {/* Content area — gated by OnboardingShell */}
         <div className="flex flex-1 flex-col">
-          <OnboardingShell onPhaseChange={handlePhaseChange}>
+          <OnboardingShell onPhaseChange={handlePhaseChange} onReady={handleReady}>
             {(walletAddress) => (
               <div className="flex flex-1 flex-col px-6 py-4">
                 {activeView === "payments" && (

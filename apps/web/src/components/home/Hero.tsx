@@ -24,7 +24,7 @@ export default function Hero() {
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
           <Link
-            href="/login"
+            href="/payments"
             className="bg-white/10 border border-white/20 text-white px-10 py-5 text-sm font-bold uppercase tracking-[0.2em] hover:bg-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
           >
             Try the demo
