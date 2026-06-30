@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   CreditCard,
   ArrowLeftRight,
-  Users,
   LogOut,
   FileSearchCorner
 } from "lucide-react";
@@ -46,7 +45,7 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
-export type AppView = "payments" | "audits" | "transactions" | "contacts";
+export type AppView = "payments" | "audits" | "transactions";
 
 const navItems: {
   id: AppView;
@@ -56,7 +55,6 @@ const navItems: {
   { id: "payments", title: "Payments", icon: CreditCard },
   { id: "audits", title: "Audits", icon: FileSearchCorner },
   { id: "transactions", title: "Transactions", icon: ArrowLeftRight },
-  { id: "contacts", title: "Contacts", icon: Users },
 ];
 
 type AppSidebarProps = {

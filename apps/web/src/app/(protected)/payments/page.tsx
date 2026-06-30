@@ -8,10 +8,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { PaymentForm } from "@/components/payment-form/PaymentForm";
-import { ContactList } from "@/components/contacts/ContactList";
 import { Button } from "@/components/ui/button";
 import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
 import { EmptyState } from "@/components/ui/empty-state";
+import { AuditOverview } from "@/components/audits/AuditOverview";
 import { ShieldCheck, ArrowLeftRight } from "lucide-react";
 
 // View titles
@@ -19,12 +19,10 @@ const viewMeta: Record<AppView, { title: string; description: string }> = {
   payments: { title: "Payments", description: "Send and manage onchain payments." },
   audits: { title: "Audits", description: "Review encrypted audit records." },
   transactions: { title: "Transactions", description: "View your transaction history." },
-  contacts: { title: "Contacts", description: "Manage your saved contacts." },
 };
 
 export default function Page() {
   const [activeView, setActiveView] = useState<AppView>("payments");
-  const [showContactForm, setShowContactForm] = useState(false);
   const [isDashboardReady, setIsDashboardReady] = useState(false);
   const [clearSession, setClearSession] = useState<(() => void) | null>(null);
 
@@ -49,7 +47,6 @@ export default function Page() {
         activeView={activeView}
         onNavigate={(view) => {
           setActiveView(view);
-          setShowContactForm(false);
         }}
         isLocked={!isDashboardReady}
         onBeforeDisconnect={clearSession ?? undefined}
@@ -67,15 +64,6 @@ export default function Page() {
               </h1>
             </div>
             {/* Contextual actions — only shown when dashboard is ready */}
-            {isDashboardReady && activeView === "contacts" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowContactForm(true)}
-              >
-                + Add Contact
-              </Button>
-            )}
           </div>
         </header>
 
@@ -89,11 +77,7 @@ export default function Page() {
                 )}
 
                 {activeView === "audits" && (
-                  <EmptyState
-                    icon={<ShieldCheck className="h-5 w-5" />}
-                    title="No audit records yet"
-                    description="Encrypted audit records will appear here after your first payment is confirmed onchain."
-                  />
+                  <AuditOverview />
                 )}
 
                 {activeView === "transactions" && (
@@ -101,14 +85,6 @@ export default function Page() {
                     icon={<ArrowLeftRight className="h-5 w-5" />}
                     title="No transactions yet"
                     description="Your onchain transaction history will appear here after your first payment."
-                  />
-                )}
-
-                {activeView === "contacts" && (
-                  <ContactList
-                    walletAddress={walletAddress}
-                    showForm={showContactForm}
-                    onCloseForm={() => setShowContactForm(false)}
                   />
                 )}
               </div>
