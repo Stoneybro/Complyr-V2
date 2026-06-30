@@ -9,11 +9,23 @@ import {
   LogOut,
   FileSearchCorner
 } from "lucide-react";
-import { useDisconnect } from "wagmi";
+import { useDisconnect, useBalance, useAccount } from "wagmi";
+import { formatUnits } from "viem";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import CopyText from "@/components/ui/copy";
 import { truncateAddress } from "@/utils/format";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Sidebar,
   SidebarContent,
@@ -66,18 +78,36 @@ export function AppSidebar({
   ...props
 }: AppSidebarProps) {
   const router = useRouter();
+  const { address } = useAccount();
+  const actualWalletAddress = walletAddress || address;
+
+  const [logoutOpen, setLogoutOpen] = React.useState(false);
+
   const { disconnect } = useDisconnect({
     mutation: {
       onSuccess: () => {
-        router.push("/");
+        // Removed router.push("/") to stay in the app shell on logout
       },
     },
   });
+
+  const { data: balanceData } = useBalance({
+    address: actualWalletAddress as `0x${string}`,
+    query: {
+      enabled: !!actualWalletAddress,
+    },
+  });
+
+  const formattedBalance = balanceData 
+    ? Number(formatUnits(balanceData.value, balanceData.decimals)).toFixed(4)
+    : "0.0000";
+  const symbol = balanceData?.symbol || "ETH";
 
   const handleDisconnect = () => {
     // Clear our localStorage keys FIRST so wagmi can't auto-reconnect
     onBeforeDisconnect?.();
     disconnect();
+    setLogoutOpen(false);
   };
 
   return (
@@ -116,6 +146,36 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* Balance Card at the top */}
+              {actualWalletAddress && (
+                <SidebarMenuItem className="mb-6">
+                  <div className="flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-sm group-data-[collapsible=icon]:hidden">
+                    {/* Top segment: Balance */}
+                    <div className="flex flex-col px-4 py-3 bg-muted/20">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Balance
+                      </span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-semibold tracking-tight text-foreground">
+                          {formattedBalance}
+                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {symbol}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Bottom segment: Address & Copy */}
+                    <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/40">
+                      <span className="text-sm font-mono text-muted-foreground">
+                        {truncateAddress(actualWalletAddress)}
+                      </span>
+                      <CopyText text={actualWalletAddress} />
+                    </div>
+                  </div>
+                </SidebarMenuItem>
+              )}
+
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.id}>
                   <TooltipProvider>
@@ -143,52 +203,45 @@ export function AppSidebar({
                         <TooltipContent side="right">
                           <p className="text-xs">Complete setup to unlock</p>
                         </TooltipContent>
-                      )}
+                       )}
                     </Tooltip>
                   </TooltipProvider>
                 </SidebarMenuItem>
               ))}
+
+              {/* Logout Action Button */}
+              {actualWalletAddress && (
+                <SidebarMenuItem className="mt-4">
+                  <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+                    <AlertDialogTrigger 
+                      render={
+                        <SidebarMenuButton className="gap-3 py-5 rounded transition-all w-full text-destructive hover:text-destructive hover:bg-destructive/10" />
+                      }
+                    >
+                      <LogOut className="shrink-0" />
+                      <span>Log Out</span>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure you want to log out?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          You will need to reconnect your wallet to access your dashboard again.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDisconnect} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Log out
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
-      {/* Footer — wallet + disconnect */}
-
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <div className="flex items-center gap-2 px-2 py-1 overflow-hidden">
-              <span className="text-xs font-mono truncate flex-1 min-w-0 text-muted-foreground group-data-[collapsible=icon]:hidden">
-                {walletAddress ? truncateAddress(walletAddress) : "No Wallet"}
-              </span>
-              {walletAddress && (
-                <span className="group-data-[collapsible=icon]:hidden">
-                  <CopyText text={walletAddress} />
-                </span>
-              )}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => handleDisconnect()}
-                    >
-                      <LogOut className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>Disconnect wallet</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
     </Sidebar>
   );
 }

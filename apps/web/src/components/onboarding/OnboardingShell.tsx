@@ -3,16 +3,15 @@
 import * as React from "react";
 import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
-import { WalletConnectStep } from "@/components/onboarding/WalletConnectStep";
+import { LoginPage } from "@/components/auth/LoginPage";
 import { CloneActivationStep } from "@/components/onboarding/CloneActivationStep";
 import { SetThresholdsStep } from "@/components/onboarding/SetThresholdsStep";
 import { SkeletonPage } from "@/components/ui/skeleton-page";
 
 // Map each setup phase to the step number shown in OnboardingLayout
-const PHASE_TO_STEP: Record<string, 1 | 2 | 3> = {
-  "connect-wallet": 1,
-  "activate-clone": 2,
-  "set-thresholds": 3,
+const PHASE_TO_STEP: Record<string, 1 | 2> = {
+  "activate-clone": 1,
+  "set-thresholds": 2,
 };
 
 interface OnboardingShellProps {
@@ -29,16 +28,16 @@ interface OnboardingShellProps {
  *
  * Phases:
  *   loading        → SkeletonPage (no content flash)
- *   connect-wallet → WalletConnectStep      (Step 1)
- *   activate-clone → CloneActivationStep    (Step 2)
- *   set-thresholds → SetThresholdsStep      (Step 3)
+ *   connect-wallet → LoginPage              (Standalone, no tracker)
+ *   activate-clone → CloneActivationStep    (Step 1)
+ *   set-thresholds → SetThresholdsStep      (Step 2)
  *   ready          → children(walletAddress) — real dashboard content
  *
- * All setup steps render inside OnboardingLayout (split-panel) so the
+ * Setup steps (1 & 2) render inside OnboardingLayout (split-panel) so the
  * sidebar chrome + left step tracker are always visible.
  */
 export function OnboardingShell({ children, onPhaseChange, onReady }: OnboardingShellProps) {
-  const { state, markCloneDeployed, markThresholdsSet, clearSession } = useOnboardingState();
+  const { state, markCloneDeployed, markThresholdsConfigured, clearSession } = useOnboardingState();
 
   // Expose clearSession to parent once available
   React.useEffect(() => {
@@ -56,6 +55,15 @@ export function OnboardingShell({ children, onPhaseChange, onReady }: Onboarding
     return <SkeletonPage />;
   }
 
+  // ── Standalone Login Page ──────────────────────────────────────────────────
+  if (state.phase === "connect-wallet") {
+    return (
+      <div className="flex flex-1 items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <LoginPage />
+      </div>
+    );
+  }
+
   // ── Ready ──────────────────────────────────────────────────────────────────
   if (state.phase === "ready") {
     return <>{children(state.walletAddress)}</>;
@@ -66,8 +74,6 @@ export function OnboardingShell({ children, onPhaseChange, onReady }: Onboarding
 
   return (
     <OnboardingLayout currentStep={currentStep}>
-      {state.phase === "connect-wallet" && <WalletConnectStep />}
-
       {state.phase === "activate-clone" && (
         <CloneActivationStep
           walletAddress={state.walletAddress}
@@ -76,11 +82,7 @@ export function OnboardingShell({ children, onPhaseChange, onReady }: Onboarding
       )}
 
       {state.phase === "set-thresholds" && (
-        <SetThresholdsStep
-          walletAddress={state.walletAddress}
-          cloneAddress={state.cloneAddress}
-          onCompleted={markThresholdsSet}
-        />
+        <SetThresholdsStep onConfigured={markThresholdsConfigured} />
       )}
     </OnboardingLayout>
   );

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useSyncExternalStore } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount } from "wagmi";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const CLONE_KEY = "wallet-deployed";
+const THRESHOLDS_KEY = "thresholds-configured";
 
 const WAGMI_KEYS = [
   "wagmi.store",
@@ -14,21 +15,9 @@ const WAGMI_KEYS = [
   "rk-recent",
 ];
 
-// Minimal ABI — we only need to read the authThresholdsConfigured boolean.
-// Using an inline slice to avoid bundling the full 61KB artifact.
-const AUDIT_REGISTRY_ABI = [
-  {
-    name: "authThresholdsConfigured",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
-
 // ─── localStorage external store ─────────────────────────────────────────────
 
-function subscribeCloneStore(callback: () => void): () => void {
+function subscribeStore(callback: () => void): () => void {
   window.addEventListener("storage", callback);
   window.addEventListener("focus", callback);
   return () => {
@@ -38,12 +27,13 @@ function subscribeCloneStore(callback: () => void): () => void {
 }
 
 const getCloneSnapshot = (): string | null => localStorage.getItem(CLONE_KEY);
-const getCloneServerSnapshot = (): null => null;
+const getThresholdsSnapshot = (): string | null => localStorage.getItem(THRESHOLDS_KEY);
+const getServerSnapshot = (): null => null;
 
-function notifyCloneStore(newValue: string | null): void {
+function notifyStore(key: string, newValue: string | null): void {
   window.dispatchEvent(
     new StorageEvent("storage", {
-      key: CLONE_KEY,
+      key,
       newValue,
       storageArea: localStorage,
     })
@@ -63,7 +53,7 @@ export type OnboardingState =
   | { phase: "loading" }
   | { phase: "connect-wallet" }
   | { phase: "activate-clone"; walletAddress: `0x${string}` }
-  | { phase: "set-thresholds"; walletAddress: `0x${string}`; cloneAddress: `0x${string}` }
+  | { phase: "set-thresholds"; walletAddress: `0x${string}` }
   | { phase: "ready"; walletAddress: `0x${string}` };
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
@@ -71,7 +61,7 @@ export type OnboardingState =
 export function useOnboardingState(): {
   state: OnboardingState;
   markCloneDeployed: (address: `0x${string}`) => void;
-  markThresholdsSet: () => void;
+  markThresholdsConfigured: () => void;
   clearSession: () => void;
 } {
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
@@ -85,44 +75,33 @@ export function useOnboardingState(): {
   // Always in sync with localStorage — re-reads on focus (DevTools clear) and
   // storage events (cross-tab). Same-tab writes dispatch a synthetic StorageEvent.
   const cloneAddress = useSyncExternalStore(
-    subscribeCloneStore,
+    subscribeStore,
     getCloneSnapshot,
-    getCloneServerSnapshot
+    getServerSnapshot
   );
 
-  // Optimistic override: set true immediately after the user completes Step 3
-  // so the dashboard unlocks instantly without waiting for the next RPC poll.
-  const [thresholdsSetOptimistic, setThresholdsSetOptimistic] = useState(false);
-
-  // Onchain source of truth: AuditRegistry.authThresholdsConfigured().
-  // Only enabled once we have a clone address to call against.
-  const { data: thresholdsConfiguredOnchain, isLoading: isThresholdLoading } =
-    useReadContract({
-      address: cloneAddress ? (cloneAddress as `0x${string}`) : undefined,
-      abi: AUDIT_REGISTRY_ABI,
-      functionName: "authThresholdsConfigured",
-      query: { enabled: mounted && !!cloneAddress },
-    });
-
-  const thresholdsConfigured = thresholdsSetOptimistic || !!thresholdsConfiguredOnchain;
+  const thresholdsConfigured = useSyncExternalStore(
+    subscribeStore,
+    getThresholdsSnapshot,
+    getServerSnapshot
+  );
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
   const markCloneDeployed = useCallback((deployedAddress: `0x${string}`) => {
     localStorage.setItem(CLONE_KEY, deployedAddress);
-    notifyCloneStore(deployedAddress);
-    // Reset optimistic threshold flag in case the user re-deployed
-    setThresholdsSetOptimistic(false);
+    notifyStore(CLONE_KEY, deployedAddress);
   }, []);
 
-  const markThresholdsSet = useCallback(() => {
-    setThresholdsSetOptimistic(true);
+  const markThresholdsConfigured = useCallback(() => {
+    localStorage.setItem(THRESHOLDS_KEY, "true");
+    notifyStore(THRESHOLDS_KEY, "true");
   }, []);
 
   const clearSession = useCallback(() => {
-    [CLONE_KEY, ...WAGMI_KEYS].forEach((k) => localStorage.removeItem(k));
-    notifyCloneStore(null);
-    setThresholdsSetOptimistic(false);
+    [CLONE_KEY, THRESHOLDS_KEY, ...WAGMI_KEYS].forEach((k) => localStorage.removeItem(k));
+    notifyStore(CLONE_KEY, null);
+    notifyStore(THRESHOLDS_KEY, null);
   }, []);
 
   // ─── State Machine ───────────────────────────────────────────────────────
@@ -137,17 +116,8 @@ export function useOnboardingState(): {
     // Wallet connected, no clone deployed yet
     if (!cloneAddress) return { phase: "activate-clone", walletAddress: address };
 
-    // Clone exists — wait for the onchain threshold check to resolve
-    if (isThresholdLoading) return { phase: "loading" };
-
-    // Thresholds not configured yet
-    if (!thresholdsConfigured) {
-      return {
-        phase: "set-thresholds",
-        walletAddress: address,
-        cloneAddress: cloneAddress as `0x${string}`,
-      };
-    }
+    // Clone deployed, but thresholds not set
+    if (!thresholdsConfigured) return { phase: "set-thresholds", walletAddress: cloneAddress as `0x${string}` };
 
     // All set — unlock the dashboard
     return { phase: "ready", walletAddress: cloneAddress as `0x${string}` };
@@ -158,9 +128,8 @@ export function useOnboardingState(): {
     isConnected,
     address,
     cloneAddress,
-    isThresholdLoading,
     thresholdsConfigured,
   ]);
 
-  return { state, markCloneDeployed, markThresholdsSet, clearSession };
+  return { state, markCloneDeployed, markThresholdsConfigured, clearSession };
 }

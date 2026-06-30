@@ -58,7 +58,7 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
   const isDeploying = status === "deploying";
 
   return (
-    <div className="max-w-[400px]">
+    <div className="max-w-[460px]">
       {/* Icon — transitions to check on success */}
       <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20">
         {status === "success" ? (
@@ -69,10 +69,10 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
       </div>
 
       {/* Headline */}
-      <h1 className="text-2xl font-semibold tracking-tight mb-3">
+      <h1 className="text-3xl font-semibold tracking-tight mb-4">
         {status === "success" ? "Account deployed" : "Deploy your account"}
       </h1>
-      <p className="text-sm text-muted-foreground leading-relaxed mb-8">
+      <p className="text-base text-muted-foreground leading-relaxed mb-10">
         {status === "success"
           ? "Your Complyr smart registry is live onchain. Setting up approval rules…"
           : "Complyr deploys an isolated AuditRegistry and ReviewTestRegistry clone pair for your business. This is a one-time transaction."}
@@ -86,8 +86,8 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
             "ReviewTestRegistry — automated audit test engine",
             "Ownership transferred to you — Complyr has zero admin rights",
           ].map((item) => (
-            <div key={item} className="flex items-start gap-3 text-sm">
-              <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div key={item} className="flex items-start gap-3 text-base">
+              <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <span className="text-muted-foreground">{item}</span>
             </div>
           ))}
@@ -96,7 +96,7 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
 
       {/* Error */}
       {status === "error" && errorMsg && (
-        <p className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-xs text-destructive">
+        <p className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {errorMsg}
         </p>
       )}
@@ -107,7 +107,7 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
           id="btn-activate-clone"
           onClick={handleActivate}
           disabled={isDeploying}
-          className="h-9 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+          className="h-11 rounded-lg bg-primary px-6 text-base font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {isDeploying ? (
             <>
@@ -124,7 +124,7 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
 
       {/* Wallet hint */}
       {status === "idle" && (
-        <p className="mt-5 text-[11px] text-muted-foreground font-mono">
+        <p className="mt-6 text-xs text-muted-foreground font-mono">
           Deploying for {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
         </p>
       )}

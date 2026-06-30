@@ -8,25 +8,20 @@ import { Check } from "lucide-react";
 const STEPS = [
   {
     num: 1 as const,
-    title: "Connect Wallet",
-    desc: "Authenticate with your wallet",
-  },
-  {
-    num: 2 as const,
     title: "Deploy Account",
     desc: "Create your onchain smart registry",
   },
   {
-    num: 3 as const,
-    title: "Set Approval Rules",
-    desc: "Configure your Delegation of Authority",
+    num: 2 as const,
+    title: "Configure Policy",
+    desc: "Set your authorization thresholds",
   },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface OnboardingLayoutProps {
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2;
   children: React.ReactNode;
 }
 
@@ -45,7 +40,7 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
       {/* ── Left: Step tracker ─────────────────────────────────────── */}
       <aside className="w-[280px] shrink-0 border-r border-border flex flex-col px-5 py-10 gap-0.5">
         {/* Product wordmark */}
-        <p className="text-[11px] font-semibold tracking-[0.15em] uppercase text-muted-foreground/60 mb-8 px-3">
+        <p className="text-xs font-semibold tracking-[0.15em] uppercase text-muted-foreground/60 mb-8 px-3">
           Complyr Setup
         </p>
 
@@ -70,7 +65,7 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
               {/* Status icon */}
               <div
                 className={`
-                  mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-all duration-200
+                  mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-200
                   ${isDone ? "bg-primary text-primary-foreground" : ""}
                   ${isActive ? "border-2 border-primary text-primary bg-transparent" : ""}
                   ${isUpcoming ? "border border-border text-muted-foreground/40 bg-transparent" : ""}
@@ -86,7 +81,7 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
               {/* Labels */}
               <div className="min-w-0">
                 <p
-                  className={`text-sm font-medium leading-tight transition-colors duration-200 ${
+                  className={`text-base font-medium leading-tight transition-colors duration-200 ${
                     isActive
                       ? "text-foreground"
                       : isDone
@@ -97,7 +92,7 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
                   {step.title}
                 </p>
                 <p
-                  className={`mt-0.5 text-[11px] leading-tight transition-colors duration-200 ${
+                  className={`mt-0.5 text-sm leading-tight transition-colors duration-200 ${
                     isActive ? "text-muted-foreground" : "text-muted-foreground/30"
                   }`}
                 >
@@ -117,8 +112,8 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
           className="flex flex-1 flex-col px-12 py-10 animate-in fade-in slide-in-from-right-3 duration-300"
         >
           {/* Step counter eyebrow */}
-          <p className="text-[11px] font-semibold tracking-[0.15em] uppercase text-muted-foreground/50 mb-8">
-            Step {currentStep} of 3
+          <p className="text-xs font-semibold tracking-[0.15em] uppercase text-muted-foreground/50 mb-8">
+            Step {currentStep} of 2
           </p>
 
           {children}
