@@ -6,11 +6,15 @@ import {
   CreditCard,
   ArrowLeftRight,
   LogOut,
-  FileSearchCorner
+  FileSearchCorner,
+  Loader2,
 } from "lucide-react";
-import { useDisconnect, useBalance, useAccount } from "wagmi";
-import { formatUnits } from "viem";
+import { useDisconnect, useAccount, useChainId } from "wagmi";
 import Image from "next/image";
+import {
+  useConfidentialBalance,
+  clearConfidentialBalanceSession,
+} from "@/hooks/useConfidentialBalance";
 import { Button } from "@/components/ui/button";
 import CopyText from "@/components/ui/copy";
 import { truncateAddress } from "@/utils/format";
@@ -77,6 +81,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const router = useRouter();
   const { address } = useAccount();
+  const chainId = useChainId();
   const actualWalletAddress = walletAddress || address;
 
   const [logoutOpen, setLogoutOpen] = React.useState(false);
@@ -89,21 +94,21 @@ export function AppSidebar({
     },
   });
 
-  const { data: balanceData } = useBalance({
-    address: actualWalletAddress as `0x${string}`,
-    query: {
-      enabled: !!actualWalletAddress,
-    },
-  });
+  const {
+    formatted: formattedBalance,
+    isLoading: isBalanceLoading,
+    isUnlocking,
+  } = useConfidentialBalance();
 
-  const formattedBalance = balanceData 
-    ? Number(formatUnits(balanceData.value, balanceData.decimals)).toFixed(4)
-    : "0.0000";
-  const symbol = balanceData?.symbol || "ETH";
+  const symbol = "cUSDC";
 
   const handleDisconnect = () => {
     // Clear our localStorage keys FIRST so wagmi can't auto-reconnect
     onBeforeDisconnect?.();
+    // Wipe the FHE decrypt session so the next wallet doesn't inherit it
+    if (actualWalletAddress && chainId) {
+      clearConfidentialBalanceSession(chainId, actualWalletAddress);
+    }
     disconnect();
     setLogoutOpen(false);
   };
@@ -154,12 +159,25 @@ export function AppSidebar({
                         Balance
                       </span>
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-2xl font-semibold tracking-tight text-foreground">
-                          {formattedBalance}
-                        </span>
-                        <span className="text-sm font-medium text-muted-foreground">
-                          {symbol}
-                        </span>
+                        {isUnlocking ? (
+                          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Unlocking…
+                          </span>
+                        ) : isBalanceLoading ? (
+                          <span className="text-2xl font-semibold tracking-tight text-muted-foreground animate-pulse">
+                            ···
+                          </span>
+                        ) : (
+                          <span className="text-2xl font-semibold tracking-tight text-foreground">
+                            {formattedBalance}
+                          </span>
+                        )}
+                        {!isUnlocking && (
+                          <span className="text-sm font-medium text-muted-foreground">
+                            {symbol}
+                          </span>
+                        )}
                       </div>
                     </div>
                     
