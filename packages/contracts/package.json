@@ -19,6 +19,7 @@
   "dependencies": {
     "@fhevm/solidity": "0.11.1",
     "@openzeppelin/confidential-contracts": "^0.2.0",
-    "encrypted-types": "^0.0.4"
+    "encrypted-types": "^0.0.4",
+    "fhevmjs": "^0.6.2"
   }
 }

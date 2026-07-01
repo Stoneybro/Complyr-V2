@@ -42,7 +42,10 @@ export async function getFhevmInstance() {
 
 async function _create() {
   // Dynamic import keeps the WASM bundle out of the initial page chunk
-  const { createInstance, SepoliaConfig } = await import("@zama-fhe/relayer-sdk/web");
+  const { createInstance, initSDK, SepoliaConfig } = await import("@zama-fhe/relayer-sdk/web");
+
+  // MUST initialize WASM binaries before creating the instance!
+  await initSDK();
 
   const inst = await createInstance({
     ...SepoliaConfig,
