@@ -1,0 +1,35 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployedAt": "2026-07-01T09:15:15.802Z",
+  "deployer": "0x0D96081998fd583334fd1757645B40fdD989B267",
+  "contracts": {
+    "ConfidentialUSDC": {
+      "address": "0x41D0cD23979676242BA1aAC424586a4D4D5d936B",
+      "description": "ERC-7984 confidential USDC wrapper"
+    },
+    "AuditRegistryImpl": {
+      "address": "0x69F27f8785DcEC7022d56899321a56b035FCc374",
+      "description": "AuditRegistry EIP-1167 clone target (not used directly)"
+    },
+    "ReviewTestRegistryImpl": {
+      "address": "0x9a1c69Cb8b9a8572cF55a01bed6c2A673f80B18d",
+      "description": "ReviewTestRegistry EIP-1167 clone target (not used directly)"
+    },
+    "ComplyrFactory": {
+      "address": "0xDF6E93267EdE844A9963293369Ec4b5d24515905",
+      "description": "Clone deployer — call deployRegistry(businessAddress) per business"
+    }
+  },
+  "testBusiness": {
+    "address": "0x0D96081998fd583334fd1757645B40fdD989B267",
+    "AuditRegistry": {
+      "address": "0x75220Bd6fe11AAd704C8C027C808a483cA07C4bA",
+      "description": "Per-business AuditRegistry clone (configured for demo)"
+    },
+    "ReviewTestRegistry": {
+      "address": "0xd15fC5324D7BE90c19b30c424f529Ed761f64cc2",
+      "description": "Per-business ReviewTestRegistry clone (configured for demo)"
+    }
+  }
+}
