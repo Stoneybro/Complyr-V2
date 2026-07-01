@@ -242,6 +242,23 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     ///         Cap: MAX_AUDITORS (5) external auditors per registry.
     function setAuditorAccess(address auditor, AuditorAccess access) external onlyOwner {
         if (auditor == address(0)) revert InvalidAddress();
+
+        if (access == AuditorAccess.NONE) {
+            if (_auditorListed[auditor]) {
+                _auditorListed[auditor] = false;
+                for (uint256 i = 0; i < _auditors.length; i++) {
+                    if (_auditors[i] == auditor) {
+                        _auditors[i] = _auditors[_auditors.length - 1];
+                        _auditors.pop();
+                        break;
+                    }
+                }
+            }
+            auditorAccess[auditor] = AuditorAccess.NONE;
+            emit AuditorAccessSet(auditor, access);
+            return;
+        }
+
         if (!_auditorListed[auditor]) {
             if (_auditors.length >= MAX_AUDITORS) revert AuditorLimitReached();
             _auditorListed[auditor] = true;
@@ -348,6 +365,18 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
 
     function auditorFindingAt(address auditor, uint256 index) external view returns (uint256) {
         return _auditorFindings[auditor][index];
+    }
+
+    function auditorCount() external view returns (uint256) {
+        return _auditors.length;
+    }
+
+    function auditorAt(uint256 index) external view returns (address) {
+        return _auditors[index];
+    }
+
+    function getAuditors() external view returns (address[] memory) {
+        return _auditors;
     }
 
     /// @notice Returns plaintext metadata for a payment.

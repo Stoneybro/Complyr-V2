@@ -30,6 +30,10 @@ interface IReviewTestRegistryInit {
     function transferOwnership(address newOwner) external;
 }
 
+interface IConfidentialToken {
+    function mint(address to, uint64 amount) external;
+}
+
 contract ComplyrFactory {
 
     // ─── State Variables ─────────────────────────────────────────────────────
@@ -138,6 +142,9 @@ contract ComplyrFactory {
             deployedAtBlock:    block.number
         });
         businesses.push(business);
+
+        // 6. Seed the user with 5000 cUSDC for the hackathon (6 decimals)
+        IConfidentialToken(confidentialToken).mint(business, 5000 * 10**6);
 
         emit BusinessRegistered(business, auditProxy, reviewProxy);
     }

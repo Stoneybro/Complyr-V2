@@ -52,9 +52,12 @@ contract ConfidentialUSDC is ZamaEthereumConfig {
         return _balances[account];
     }
 
-    function mint(address to, externalEuint64 amount, bytes calldata inputProof) external onlyOwner returns (euint64) {
+
+
+    /// @notice Public mint for hackathon testing
+    function mint(address to, uint64 amount) external returns (euint64) {
         if (to == address(0)) revert InvalidAddress();
-        euint64 encryptedAmount = FHE.fromExternal(amount, inputProof);
+        euint64 encryptedAmount = FHE.asEuint64(amount);
         euint64 newBalance = FHE.add(_balances[to], encryptedAmount);
         _balances[to] = newBalance;
 
