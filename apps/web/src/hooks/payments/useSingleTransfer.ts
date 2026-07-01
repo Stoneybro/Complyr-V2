@@ -85,7 +85,7 @@ export function useSingleTransfer() {
         abi: ConfidentialUSDCAbi,
         functionName: "confidentialTransferAndCallWithAudit",
         args: [
-          to,
+          auditRegistryAddress,
           encAmount,
           amountProof,
           {

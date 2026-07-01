@@ -78,7 +78,7 @@ export function useBatchTransfer() {
           abi: ConfidentialUSDCAbi,
           functionName: "confidentialTransferAndCallWithAudit",
           args: [
-            r.address,
+            data.auditRegistryAddress,
             encAmount,
             amountProof,
             {
