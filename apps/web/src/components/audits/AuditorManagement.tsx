@@ -35,13 +35,18 @@ const MOCK_AUDITORS: AuditorRecord[] = [
     { address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", access: AuditorAccess.SIGNAL },
 ];
 
-export function AuditorManagement() {
+interface AuditorManagementProps {
+    auditRegistryAddress?: `0x${string}`;
+}
+
+export function AuditorManagement({ auditRegistryAddress }: AuditorManagementProps) {
     const [auditors, setAuditors] = useState<AuditorRecord[]>(MOCK_AUDITORS);
     const [newAddress, setNewAddress] = useState("");
     const [newAccess, setNewAccess] = useState<string>("signal");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const maxAuditors = 5;
+
 
     const mapAccessStringToEnum = (val: string): AuditorAccess => {
         switch (val) {

@@ -3,7 +3,11 @@
 import React from "react";
 import { AuditorManagement } from "./AuditorManagement";
 
-export function AuditOverview() {
+interface AuditOverviewProps {
+  auditRegistryAddress?: `0x${string}`;
+}
+
+export function AuditOverview({ auditRegistryAddress }: AuditOverviewProps) {
     return (
         <div className="max-w-4xl mx-auto w-full pb-12 space-y-6">
             <div className="flex flex-col gap-1 mb-6">
@@ -11,7 +15,7 @@ export function AuditOverview() {
                 <p className="text-sm text-muted-foreground">Manage your external human auditors and configure their data access levels.</p>
             </div>
             
-            <AuditorManagement />
+            <AuditorManagement auditRegistryAddress={auditRegistryAddress} />
         </div>
     );
 }

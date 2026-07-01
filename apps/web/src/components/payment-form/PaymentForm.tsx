@@ -19,7 +19,6 @@ import { useBatchTransfer } from "@/hooks/payments/useBatchTransfer";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { z } from "zod";
-import { USDCAddress } from "@/lib/CA";
 import { getCategoryOptions, stringToCategory } from "@/lib/audit-enums";
 import { useQuery } from "@tanstack/react-query";
 import { fetchWalletBalance } from "@/utils/helper";
@@ -159,11 +158,12 @@ RecipientRow.displayName = "RecipientRow";
 
 interface PaymentFormProps {
     walletAddress?: `0x${string}`;
+    auditRegistryAddress?: `0x${string}`;
 }
 
 const emptyRecipient = (): RecipientData => ({ address: "", amount: "", category: "" });
 
-export function PaymentForm({ walletAddress }: PaymentFormProps) {
+export function PaymentForm({ walletAddress, auditRegistryAddress }: PaymentFormProps) {
     const [tab, setTab] = useState<"single" | "batch">("single");
 
     // Fetch wallet balance
@@ -188,8 +188,8 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [transactionStatus, setTransactionStatus] = useState("");
 
-    const singleMutation = useSingleTransfer(activeBalance);
-    const batchMutation = useBatchTransfer(activeBalance);
+    const singleMutation = useSingleTransfer();
+    const batchMutation = useBatchTransfer();
 
     React.useEffect(() => {
         const processing = singleMutation.isPending || batchMutation.isPending;
@@ -233,7 +233,6 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setTransactionStatus("Initializing...");
-        const tokenAddress = USDCAddress as `0x${string}`;
 
         try {
             if (tab === "single") {
@@ -248,10 +247,8 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                     to: single.address as `0x${string}`,
                     amount: single.amount,
                     category: single.category,
-                    invoiceFile: singleInvoice,
-                    poFile: singlePO,
-                    tokenAddress,
-                    requiresApproval,
+                    auditRegistryAddress: auditRegistryAddress!,
+                    walletAddress: walletAddress!,
                     onStatusUpdate: setTransactionStatus,
                 });
 
@@ -268,13 +265,13 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
                 if (!validate(valid)) return;
 
                 await batchMutation.mutateAsync({
-                    recipients: valid.map((r) => r.address as `0x${string}`),
-                    amounts: valid.map((r) => r.amount),
-                    categories: valid.map((r) => r.category),
-                    invoiceHashes: valid.map(() => null), // file hashing would happen here
-                    poHashes: valid.map(() => null),
-                    tokenAddress,
-                    requiresApproval,
+                    recipients: valid.map((r) => ({
+                        address: r.address as `0x${string}`,
+                        amount: r.amount,
+                        category: r.category,
+                    })),
+                    auditRegistryAddress: auditRegistryAddress!,
+                    walletAddress: walletAddress!,
                     onStatusUpdate: setTransactionStatus,
                 });
 

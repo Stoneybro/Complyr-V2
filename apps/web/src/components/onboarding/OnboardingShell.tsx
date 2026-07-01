@@ -4,46 +4,49 @@ import * as React from "react";
 import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
 import { LoginPage } from "@/components/auth/LoginPage";
-import { CloneActivationStep } from "@/components/onboarding/CloneActivationStep";
+import { DeployRegistryStep } from "@/components/onboarding/DeployRegistryStep";
 import { SetThresholdsStep } from "@/components/onboarding/SetThresholdsStep";
+import { DeactivatedStep } from "@/components/onboarding/DeactivatedStep";
 import { SkeletonPage } from "@/components/ui/skeleton-page";
+import { WrongNetworkPage } from "@/components/auth/WrongNetworkPage";
 
 // Map each setup phase to the step number shown in OnboardingLayout
 const PHASE_TO_STEP: Record<string, 1 | 2> = {
-  "activate-clone": 1,
+  "deploy-registry": 1,
   "set-thresholds": 2,
 };
 
 interface OnboardingShellProps {
-  /** Dashboard content — rendered only when phase === "ready" */
-  children: (walletAddress: `0x${string}`) => React.ReactNode;
+  /**
+   * Dashboard content — rendered only when phase === "ready".
+   * Receives both the EOA and the business's AuditRegistry clone address.
+   */
+  children: (addresses: {
+    walletAddress: `0x${string}`;
+    auditRegistryAddress: `0x${string}`;
+    reviewRegistryAddress: `0x${string}`;
+  }) => React.ReactNode;
   /** Tells the parent sidebar whether to lock its nav items */
   onPhaseChange?: (isReady: boolean) => void;
-  /** Exposes clearSession so the sidebar disconnect button can call it */
-  onReady?: (api: { clearSession: () => void }) => void;
 }
 
 /**
- * Orchestrates the 3-step gated setup flow inside the dashboard content area.
+ * Orchestrates the gated setup flow inside the dashboard content area.
+ *
+ * Phase derivation is entirely chain-state driven (via useOnboardingState).
+ * No localStorage is involved in phase gating.
  *
  * Phases:
- *   loading        → SkeletonPage (no content flash)
- *   connect-wallet → LoginPage              (Standalone, no tracker)
- *   activate-clone → CloneActivationStep    (Step 1)
- *   set-thresholds → SetThresholdsStep      (Step 2)
- *   ready          → children(walletAddress) — real dashboard content
- *
- * Setup steps (1 & 2) render inside OnboardingLayout (split-panel) so the
- * sidebar chrome + left step tracker are always visible.
+ *   loading          → SkeletonPage (no content flash)
+ *   connect-wallet   → LoginPage (standalone)
+ *   wrong-network    → WrongNetworkPage (standalone)
+ *   deactivated      → DeactivatedStep (standalone)
+ *   deploy-registry  → DeployRegistryStep (Step 1, split-panel)
+ *   set-thresholds   → SetThresholdsStep  (Step 2, split-panel)
+ *   ready            → children({ walletAddress, auditRegistryAddress, reviewRegistryAddress })
  */
-export function OnboardingShell({ children, onPhaseChange, onReady }: OnboardingShellProps) {
-  const { state, markCloneDeployed, markThresholdsConfigured, clearSession } = useOnboardingState();
-
-  // Expose clearSession to parent once available
-  React.useEffect(() => {
-    onReady?.({ clearSession });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearSession]);
+export function OnboardingShell({ children, onPhaseChange }: OnboardingShellProps) {
+  const { state, refetch } = useOnboardingState();
 
   // Keep sidebar lock in sync
   React.useEffect(() => {
@@ -55,7 +58,7 @@ export function OnboardingShell({ children, onPhaseChange, onReady }: Onboarding
     return <SkeletonPage />;
   }
 
-  // ── Standalone Login Page ──────────────────────────────────────────────────
+  // ── Standalone pages (no onboarding layout chrome) ─────────────────────────
   if (state.phase === "connect-wallet") {
     return (
       <div className="flex flex-1 items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -64,9 +67,33 @@ export function OnboardingShell({ children, onPhaseChange, onReady }: Onboarding
     );
   }
 
+  if (state.phase === "wrong-network") {
+    return (
+      <div className="flex flex-1 items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <WrongNetworkPage />
+      </div>
+    );
+  }
+
+  if (state.phase === "deactivated") {
+    return (
+      <div className="flex flex-1 items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <DeactivatedStep walletAddress={state.walletAddress} />
+      </div>
+    );
+  }
+
   // ── Ready ──────────────────────────────────────────────────────────────────
   if (state.phase === "ready") {
-    return <>{children(state.walletAddress)}</>;
+    return (
+      <>
+        {children({
+          walletAddress: state.walletAddress,
+          auditRegistryAddress: state.auditRegistryAddress,
+          reviewRegistryAddress: state.reviewRegistryAddress,
+        })}
+      </>
+    );
   }
 
   // ── Setup steps (wrapped in the split-panel layout) ────────────────────────
@@ -74,15 +101,19 @@ export function OnboardingShell({ children, onPhaseChange, onReady }: Onboarding
 
   return (
     <OnboardingLayout currentStep={currentStep}>
-      {state.phase === "activate-clone" && (
-        <CloneActivationStep
+      {state.phase === "deploy-registry" && (
+        <DeployRegistryStep
           walletAddress={state.walletAddress}
-          onActivated={markCloneDeployed}
+          onDeployed={refetch}
         />
       )}
 
       {state.phase === "set-thresholds" && (
-        <SetThresholdsStep onConfigured={markThresholdsConfigured} />
+        <SetThresholdsStep
+          auditRegistryAddress={state.auditRegistryAddress}
+          walletAddress={state.walletAddress}
+          onConfigured={refetch}
+        />
       )}
     </OnboardingLayout>
   );

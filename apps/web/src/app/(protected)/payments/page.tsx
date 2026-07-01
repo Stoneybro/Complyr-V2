@@ -8,11 +8,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { PaymentForm } from "@/components/payment-form/PaymentForm";
-import { Button } from "@/components/ui/button";
 import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AuditOverview } from "@/components/audits/AuditOverview";
-import { ShieldCheck, ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 
 // View titles
 const viewMeta: Record<AppView, { title: string; description: string }> = {
@@ -24,20 +23,10 @@ const viewMeta: Record<AppView, { title: string; description: string }> = {
 export default function Page() {
   const [activeView, setActiveView] = useState<AppView>("payments");
   const [isDashboardReady, setIsDashboardReady] = useState(false);
-  const [clearSession, setClearSession] = useState<(() => void) | null>(null);
 
   const handlePhaseChange = useCallback((isReady: boolean) => {
     setIsDashboardReady(isReady);
   }, []);
-
-  const handleReady = useCallback(
-    ({ clearSession: cs }: { clearSession: () => void }) => {
-      // useState setter with function value needs to be wrapped to avoid
-      // React treating it as an updater function
-      setClearSession(() => cs);
-    },
-    []
-  );
 
   const meta = viewMeta[activeView];
 
@@ -49,7 +38,6 @@ export default function Page() {
           setActiveView(view);
         }}
         isLocked={!isDashboardReady}
-        onBeforeDisconnect={clearSession ?? undefined}
       />
 
       <SidebarInset>
@@ -63,21 +51,23 @@ export default function Page() {
                 {isDashboardReady ? meta.title : ""}
               </h1>
             </div>
-            {/* Contextual actions — only shown when dashboard is ready */}
           </div>
         </header>
 
         {/* Content area — gated by OnboardingShell */}
         <div className="flex flex-1 flex-col">
-          <OnboardingShell onPhaseChange={handlePhaseChange} onReady={handleReady}>
-            {(walletAddress) => (
+          <OnboardingShell onPhaseChange={handlePhaseChange}>
+            {({ walletAddress, auditRegistryAddress, reviewRegistryAddress }) => (
               <div className="flex flex-1 flex-col px-6 py-4">
                 {activeView === "payments" && (
-                  <PaymentForm walletAddress={walletAddress} />
+                  <PaymentForm
+                    walletAddress={walletAddress}
+                    auditRegistryAddress={auditRegistryAddress}
+                  />
                 )}
 
                 {activeView === "audits" && (
-                  <AuditOverview />
+                  <AuditOverview auditRegistryAddress={auditRegistryAddress} />
                 )}
 
                 {activeView === "transactions" && (

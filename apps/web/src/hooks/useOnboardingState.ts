@@ -1,135 +1,158 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useSyncExternalStore } from "react";
-import { useAccount } from "wagmi";
+import { useMemo } from "react";
+import { useAccount, useReadContract } from "wagmi";
+import { sepolia } from "wagmi/chains";
+import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
+import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
+import { ComplyrFactoryAddress } from "@/lib/CA";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const CLONE_KEY = "wallet-deployed";
-const THRESHOLDS_KEY = "thresholds-configured";
-
-const WAGMI_KEYS = [
-  "wagmi.store",
-  "wagmi.wallet",
-  "wagmi.connected",
-  "rk-recent",
-];
-
-// ─── localStorage external store ─────────────────────────────────────────────
-
-function subscribeStore(callback: () => void): () => void {
-  window.addEventListener("storage", callback);
-  window.addEventListener("focus", callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener("focus", callback);
-  };
-}
-
-const getCloneSnapshot = (): string | null => localStorage.getItem(CLONE_KEY);
-const getThresholdsSnapshot = (): string | null => localStorage.getItem(THRESHOLDS_KEY);
-const getServerSnapshot = (): null => null;
-
-function notifyStore(key: string, newValue: string | null): void {
-  window.dispatchEvent(
-    new StorageEvent("storage", {
-      key,
-      newValue,
-      storageArea: localStorage,
-    })
-  );
-}
-
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type OnboardingPhase =
   | "loading"
   | "connect-wallet"
-  | "activate-clone"
+  | "wrong-network"
+  | "deploy-registry"
+  | "deactivated"
   | "set-thresholds"
   | "ready";
 
 export type OnboardingState =
   | { phase: "loading" }
   | { phase: "connect-wallet" }
-  | { phase: "activate-clone"; walletAddress: `0x${string}` }
-  | { phase: "set-thresholds"; walletAddress: `0x${string}` }
-  | { phase: "ready"; walletAddress: `0x${string}` };
+  | { phase: "wrong-network" }
+  | { phase: "deploy-registry"; walletAddress: `0x${string}` }
+  | { phase: "deactivated"; walletAddress: `0x${string}` }
+  | {
+      phase: "set-thresholds";
+      walletAddress: `0x${string}`;
+      auditRegistryAddress: `0x${string}`;
+      reviewRegistryAddress: `0x${string}`;
+    }
+  | {
+      phase: "ready";
+      walletAddress: `0x${string}`;
+      auditRegistryAddress: `0x${string}`;
+      reviewRegistryAddress: `0x${string}`;
+    };
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useOnboardingState(): {
   state: OnboardingState;
-  markCloneDeployed: (address: `0x${string}`) => void;
-  markThresholdsConfigured: () => void;
-  clearSession: () => void;
+  refetch: () => void;
 } {
-  const { address, isConnected, isConnecting, isReconnecting } = useAccount();
+  const { address, isConnected, isConnecting, isReconnecting, chain } = useAccount();
 
-  // Guard against SSR/wagmi hydration flash
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // ── Step 1: Read business registry from factory ───────────────────────────
+  const {
+    data: registry,
+    isLoading: registryLoading,
+    refetch: refetchRegistry,
+  } = useReadContract({
+    address: ComplyrFactoryAddress as `0x${string}`,
+    abi: ComplyrFactoryAbi,
+    functionName: "getRegistry",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected && !!address && chain?.id === sepolia.id,
+    },
+  });
 
-  // Always in sync with localStorage — re-reads on focus (DevTools clear) and
-  // storage events (cross-tab). Same-tab writes dispatch a synthetic StorageEvent.
-  const cloneAddress = useSyncExternalStore(
-    subscribeStore,
-    getCloneSnapshot,
-    getServerSnapshot
-  );
+  const reg = registry as
+    | {
+        auditRegistry: `0x${string}`;
+        reviewTestRegistry: `0x${string}`;
+        active: boolean;
+        deployedAtBlock: bigint;
+      }
+    | undefined;
 
-  const thresholdsConfigured = useSyncExternalStore(
-    subscribeStore,
-    getThresholdsSnapshot,
-    getServerSnapshot
-  );
+  const hasRegistry =
+    !!reg && reg.deployedAtBlock > 0n;
 
-  // ─── Actions ─────────────────────────────────────────────────────────────
+  // ── Step 2: Read authThresholdsConfigured from the AuditRegistry clone ────
+  const {
+    data: thresholdsConfigured,
+    isLoading: thresholdsLoading,
+    refetch: refetchThresholds,
+  } = useReadContract({
+    address: reg?.auditRegistry,
+    abi: AuditRegistryAbi,
+    functionName: "authThresholdsConfigured",
+    chainId: sepolia.id,
+    query: {
+      enabled: hasRegistry && reg?.active === true,
+    },
+  });
 
-  const markCloneDeployed = useCallback((deployedAddress: `0x${string}`) => {
-    localStorage.setItem(CLONE_KEY, deployedAddress);
-    notifyStore(CLONE_KEY, deployedAddress);
-  }, []);
+  // ── Refetch both reads (called after tx confirmation) ─────────────────────
+  const refetch = () => {
+    refetchRegistry();
+    refetchThresholds();
+  };
 
-  const markThresholdsConfigured = useCallback(() => {
-    localStorage.setItem(THRESHOLDS_KEY, "true");
-    notifyStore(THRESHOLDS_KEY, "true");
-  }, []);
-
-  const clearSession = useCallback(() => {
-    [CLONE_KEY, THRESHOLDS_KEY, ...WAGMI_KEYS].forEach((k) => localStorage.removeItem(k));
-    notifyStore(CLONE_KEY, null);
-    notifyStore(THRESHOLDS_KEY, null);
-  }, []);
-
-  // ─── State Machine ───────────────────────────────────────────────────────
-
+  // ── State machine ─────────────────────────────────────────────────────────
   const state = useMemo((): OnboardingState => {
-    // Still initializing — show skeleton
-    if (!mounted || isConnecting || isReconnecting) return { phase: "loading" };
+    // Still hydrating wagmi
+    if (isConnecting || isReconnecting) return { phase: "loading" };
 
-    // No wallet connected
+    // No wallet
     if (!isConnected || !address) return { phase: "connect-wallet" };
 
-    // Wallet connected, no clone deployed yet
-    if (!cloneAddress) return { phase: "activate-clone", walletAddress: address };
+    // Wrong network
+    if (chain?.id !== sepolia.id) return { phase: "wrong-network" };
 
-    // Clone deployed, but thresholds not set
-    if (!thresholdsConfigured) return { phase: "set-thresholds", walletAddress: cloneAddress as `0x${string}` };
+    // Waiting for factory read
+    if (registryLoading) return { phase: "loading" };
 
-    // All set — unlock the dashboard
-    return { phase: "ready", walletAddress: cloneAddress as `0x${string}` };
+    // Not registered yet
+    if (!hasRegistry) {
+      return { phase: "deploy-registry", walletAddress: address };
+    }
+
+    // Deactivated by protocol admin
+    if (!reg!.active) {
+      return { phase: "deactivated", walletAddress: address };
+    }
+
+    // Waiting for threshold read
+    if (thresholdsLoading) return { phase: "loading" };
+
+    const auditRegistryAddress = reg!.auditRegistry;
+    const reviewRegistryAddress = reg!.reviewTestRegistry;
+
+    // Thresholds not yet configured
+    if (!thresholdsConfigured) {
+      return {
+        phase: "set-thresholds",
+        walletAddress: address,
+        auditRegistryAddress,
+        reviewRegistryAddress,
+      };
+    }
+
+    // All good — unlock the dashboard
+    return {
+      phase: "ready",
+      walletAddress: address,
+      auditRegistryAddress,
+      reviewRegistryAddress,
+    };
   }, [
-    mounted,
     isConnecting,
     isReconnecting,
     isConnected,
     address,
-    cloneAddress,
+    chain,
+    registryLoading,
+    hasRegistry,
+    reg,
+    thresholdsLoading,
     thresholdsConfigured,
   ]);
 
-  return { state, markCloneDeployed, markThresholdsConfigured, clearSession };
+  return { state, refetch };
 }
