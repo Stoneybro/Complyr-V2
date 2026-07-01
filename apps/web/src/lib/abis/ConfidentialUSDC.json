@@ -314,14 +314,9 @@
         "type": "address"
       },
       {
-        "internalType": "externalEuint64",
+        "internalType": "uint64",
         "name": "amount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
+        "type": "uint64"
       }
     ],
     "name": "mint",

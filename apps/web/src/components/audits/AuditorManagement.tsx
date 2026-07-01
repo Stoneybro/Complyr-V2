@@ -33,6 +33,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export enum AuditorAccess {
   NONE = 0,
@@ -85,6 +95,9 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
   const [newAddress, setNewAddress] = useState("");
   const [newAccess, setNewAccess] = useState("signal");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [grantDialogOpen, setGrantDialogOpen] = useState(false);
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
+  const [auditorToRevoke, setAuditorToRevoke] = useState<string | null>(null);
 
   const hasRegistry = Boolean(auditRegistryAddress);
 
@@ -240,6 +253,11 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
       return;
     }
 
+    setGrantDialogOpen(true);
+  };
+
+  const confirmGrantAccess = () => {
+    const checksumAddress = getAddress(newAddress) as `0x${string}`;
     reset();
     setPendingAction({ type: "grant", address: checksumAddress });
     writeContract({
@@ -249,9 +267,10 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
       args: [checksumAddress, mapAccessStringToEnum(newAccess)],
       chainId: sepolia.id,
     });
+    setGrantDialogOpen(false);
   };
 
-  const handleRevoke = (address: `0x${string}`) => {
+  const handleRevokeClick = (address: `0x${string}`) => {
     if (!auditRegistryAddress) {
       toast.error("Audit registry address is not available");
       return;
@@ -261,16 +280,25 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
       toast.error("Only the registry owner can revoke auditor access");
       return;
     }
+    
+    setAuditorToRevoke(address);
+    setRevokeDialogOpen(true);
+  };
 
+  const confirmRevokeAccess = () => {
+    if (!auditorToRevoke || !auditRegistryAddress) return;
+    
     reset();
-    setPendingAction({ type: "revoke", address });
+    setPendingAction({ type: "revoke", address: auditorToRevoke as `0x${string}` });
     writeContract({
       address: auditRegistryAddress,
       abi: auditRegistryAbi,
       functionName: "setAuditorAccess",
-      args: [address, AuditorAccess.NONE],
+      args: [auditorToRevoke, AuditorAccess.NONE],
       chainId: sepolia.id,
     });
+    setRevokeDialogOpen(false);
+    setAuditorToRevoke(null);
   };
 
   const getAccessBadge = (access: AuditorAccess) => {
@@ -430,7 +458,7 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
                         variant="ghost"
                         size="icon"
                         className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => handleRevoke(auditor.address)}
+                        onClick={() => handleRevokeClick(auditor.address)}
                         disabled={!isOwner || isSubmitting}
                         aria-label={`Revoke ${auditor.address}`}
                       >
@@ -448,6 +476,41 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will grant {newAccess} access to {newAddress}. They will be able to see the data permitted under this tier.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmGrantAccess}>Grant Access</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={revokeDialogOpen} onOpenChange={(open) => {
+        setRevokeDialogOpen(open);
+        if (!open) setAuditorToRevoke(null);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will revoke all access for {auditorToRevoke}. They will no longer be able to read any encrypted data or access analytics.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRevokeAccess} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Revoke Access
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
