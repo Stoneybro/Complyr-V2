@@ -4,7 +4,7 @@ import React from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { ShieldCheck, AlertCircle, AlertTriangle, AlertOctagon, Link as LinkIcon } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { MockAuditRegistryAddress } from "@/lib/CA";
+import { AuditRegistryAddress } from "@/lib/CA";
 
 type FindingRecord = {
     id: string;
@@ -56,10 +56,10 @@ export function FindingsFeed() {
                     <div className="flex flex-col sm:flex-row justify-between p-4 rounded-xl border border-border bg-muted/20">
                         <div className="space-y-1">
                             <p className="text-sm font-medium">Audit Registry Contract</p>
-                            <p className="text-xs text-muted-foreground font-mono">{MockAuditRegistryAddress}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{AuditRegistryAddress}</p>
                         </div>
                         <div className="mt-2 sm:mt-0 flex items-center">
-                            <a href={`https://explorer.example.com/address/${MockAuditRegistryAddress}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                            <a href={`https://explorer.example.com/address/${AuditRegistryAddress}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
                                 View on Explorer <LinkIcon className="h-3 w-3" />
                             </a>
                         </div>

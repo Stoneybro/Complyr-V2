@@ -101,11 +101,13 @@ contract ComplyrFactory {
 
     // ─── Core: Deploy a Business Registry Pair ───────────────────────────────
 
-    /// @notice Deploys an isolated (AuditRegistry, ReviewTestRegistry) clone pair
-    ///         for a business. Wires them together. Transfers ownership to the business.
+    /// @notice Permissionless self-registration. Deploys an isolated
+    ///         (AuditRegistry, ReviewTestRegistry) clone pair for msg.sender.
+    ///         Wires them together and transfers ownership to msg.sender immediately.
     ///         After this call, the factory has no privileged access to the deployed contracts.
-    function deployRegistry(address business) external onlyOwner returns (address auditProxy, address reviewProxy) {
-        if (business == address(0)) revert InvalidAddress();
+    ///         Each address can only register once — reverts with AlreadyRegistered if called again.
+    function deployRegistry() external returns (address auditProxy, address reviewProxy) {
+        address business = msg.sender;
         if (registries[business].deployedAtBlock != 0) revert AlreadyRegistered();
 
         // 1. Clone both implementations

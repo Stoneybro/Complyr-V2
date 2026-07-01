@@ -103,7 +103,7 @@ async function deploySystem() {
   await factory.waitForDeployment();
 
   // ── Deploy business registry pair ─────────────────────────────────────────
-  await factory.connect(deployer).deployRegistry(business.address);
+  await factory.connect(business).deployRegistry();
   const reg = await factory.getRegistry(business.address);
 
   const auditRegistry = await hre.ethers.getContractAt("AuditRegistry", reg.auditRegistry);
@@ -219,7 +219,7 @@ describe("1. ComplyrFactory", function () {
     const { factory, business } = fixture;
 
     await expect(
-      factory.connect(fixture.deployer).deployRegistry(business.address),
+      factory.connect(fixture.business).deployRegistry(),
     ).to.be.revertedWithCustomError(factory, "AlreadyRegistered");
   });
 
@@ -312,7 +312,7 @@ describe("3. AuditRegistry — onboarding gate", function () {
       .deploy(tokenAddress, await arImpl.getAddress(), await rtrImpl.getAddress());
     await factory2.waitForDeployment();
 
-    await factory2.connect(deployer).deployRegistry(businessB.address);
+    await factory2.connect(businessB).deployRegistry();
     const reg2 = await factory2.getRegistry(businessB.address);
 
     // Mint to businessB
@@ -832,7 +832,7 @@ describe("8. Factory Isolation", function () {
     const { factory, deployer, arAddress, rtrAddress, business, outsider } = fixture;
 
     // Deploy a second business registry
-    await factory.connect(deployer).deployRegistry(outsider.address);
+    await factory.connect(outsider).deployRegistry();
     const regB = await factory.getRegistry(outsider.address);
 
     // Addresses are distinct
@@ -854,7 +854,7 @@ describe("8. Factory Isolation", function () {
     const { factory, deployer, outsider, token, tokenAddress, arAddress } = fixture;
 
     // Deploy second business
-    await factory.connect(deployer).deployRegistry(outsider.address);
+    await factory.connect(outsider).deployRegistry();
     const regB = await factory.getRegistry(outsider.address);
     const arB = await hre.ethers.getContractAt("AuditRegistry", regB.auditRegistry);
 

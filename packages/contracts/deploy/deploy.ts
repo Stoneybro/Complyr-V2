@@ -6,7 +6,7 @@
  *   2. AuditRegistry (implementation — used as EIP-1167 clone target)
  *   3. ReviewTestRegistry (implementation — used as EIP-1167 clone target)
  *   4. ComplyrFactory
- *   5. deployRegistry(testBusiness) — wires a full clone pair for smoke-testing
+ *   5. deployRegistry() — self-registers the testBusiness wallet for smoke-testing
  *
  * Usage:
  *   pnpm hardhat run deploy/deploy.ts --network sepolia
@@ -86,8 +86,11 @@ async function main() {
 
   const businessAddress = TEST_BUSINESS_ADDRESS !== "" ? TEST_BUSINESS_ADDRESS : deployer.address;
 
-  console.log(`[5/5] Deploying test business registry pair for: ${businessAddress}`);
-  const deployTx = await complyrFactory.connect(deployer).deployRegistry(businessAddress);
+  console.log(`[5/5] Deploying test business registry pair — registering: ${businessAddress}`);
+  const businessSigner = (await ethers.getSigners()).find(
+    (s) => s.address.toLowerCase() === businessAddress.toLowerCase()
+  ) ?? deployer;
+  const deployTx = await complyrFactory.connect(businessSigner).deployRegistry();
   const receipt = await deployTx.wait();
 
   const reg = await complyrFactory.getRegistry(businessAddress);
@@ -144,7 +147,7 @@ async function main() {
       },
       ComplyrFactory: {
         address: factoryAddress,
-        description: "Clone deployer — call deployRegistry(businessAddress) per business",
+        description: "Clone deployer — call deployRegistry() as your own wallet to self-register",
       },
     },
     testBusiness: {

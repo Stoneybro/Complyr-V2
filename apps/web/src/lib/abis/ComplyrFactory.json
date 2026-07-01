@@ -169,13 +169,7 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "business",
-        "type": "address"
-      }
-    ],
+    "inputs": [],
     "name": "deployRegistry",
     "outputs": [
       {

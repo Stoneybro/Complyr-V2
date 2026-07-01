@@ -19,7 +19,7 @@ import { useBatchTransfer } from "@/hooks/payments/useBatchTransfer";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { z } from "zod";
-import { MockUSDCAddress } from "@/lib/CA";
+import { USDCAddress } from "@/lib/CA";
 import { getCategoryOptions, stringToCategory } from "@/lib/audit-enums";
 import { useQuery } from "@tanstack/react-query";
 import { fetchWalletBalance } from "@/utils/helper";
@@ -233,7 +233,7 @@ export function PaymentForm({ walletAddress }: PaymentFormProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setTransactionStatus("Initializing...");
-        const tokenAddress = MockUSDCAddress as `0x${string}`;
+        const tokenAddress = USDCAddress as `0x${string}`;
 
         try {
             if (tab === "single") {
