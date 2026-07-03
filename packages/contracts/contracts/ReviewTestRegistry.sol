@@ -112,6 +112,12 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => euint64))) private _testedValues; // for Phase 2 finding creation
     mapping(address auditor => mapping(uint256 paymentId => mapping(uint8 testType => bool)))  private _hasTestResult;
     mapping(address auditor => mapping(address recipient => uint256 count))                    private _recipientEvaluationCount;
+
+    // Authorization breach results — keyed by paymentId (not approver) so any ANALYTICS/FULL
+    // auditor can retrieve the result. The approver-keyed shape from V1 was cryptographically
+    // inert: only the approver could ever decrypt, defeating the audit purpose.
+    mapping(uint256 paymentId => ebool  result) private _authBreachResults;
+    mapping(uint256 paymentId => bool   hasResult) private _hasAuthBreachResult;
     mapping(address auditor => bool listed)                                                    private _auditorListed;
     mapping(address auditor => bool active)                                                    public  auditorActive;
 
@@ -382,10 +388,14 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
     /// @notice Stores a pre-computed AUTHORIZATION_BREACH result from AuditRegistry.
     ///         AuditRegistry performs FHE.lt(approverTier, authLevel) in its own context
-    ///         because it holds allowThis on both handles. The result ebool and the authLevel
-    ///         handle are passed in with ACL grants already issued before this call.
+    ///         because it holds allowThis on both handles. The breach ebool has already had
+    ///         FHE.allow granted to this contract and to all ANALYTICS/FULL auditors before
+    ///         this call is made (AuditRegistry loops its _auditors array).
     ///         breach = true: approver's tier was BELOW the payment's required authLevel.
     ///         breach = false: approver had sufficient authority — no finding will be created.
+    ///
+    ///         Keyed by paymentId (not approver) so any ANALYTICS/FULL auditor can retrieve
+    ///         via getAuthBreachResult(). The approver address is retained only for the event.
     function storeAuthBreachResult(
         uint256 paymentId,
         address approver,
@@ -395,18 +405,28 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         if (msg.sender != address(auditRegistry)) revert Unauthorized();
         uint8 testType = uint8(TestType.AUTHORIZATION_BREACH);
 
-        _testResults[approver][paymentId][testType]  = breach;
-        _testedValues[approver][paymentId][testType] = authLevelHandle;
-        _hasTestResult[approver][paymentId][testType] = true;
+        _authBreachResults[paymentId]   = breach;
+        _hasAuthBreachResult[paymentId] = true;
 
         FHE.allowThis(breach);
         FHE.allowThis(authLevelHandle);
+        // approver retains personal decrypt access
         FHE.allow(breach, approver);
 
         emit TestEvaluated(approver, paymentId, testType, breach);
     }
 
     // ─── View Functions ──────────────────────────────────────────────────────
+
+    /// @notice Returns the AUTHORIZATION_BREACH ebool for a payment.
+    ///         Access: ANALYTICS or FULL auditors, and the payment approver (via personal grant).
+    ///         Unlike getTestResult(), this is keyed by paymentId — the breach is a per-payment
+    ///         fact, not a per-auditor test result.
+    function getAuthBreachResult(uint256 paymentId) external view returns (ebool) {
+        if (!_isApprovedAuditor(msg.sender) && msg.sender != owner) revert Unauthorized();
+        if (!_hasAuthBreachResult[paymentId]) revert ResultNotAvailable();
+        return _authBreachResults[paymentId];
+    }
 
     function getTest(address auditor, uint8 testType)
         external

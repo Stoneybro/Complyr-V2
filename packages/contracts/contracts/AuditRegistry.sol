@@ -149,6 +149,10 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     mapping(address approver => bool authorized)          public  authorizedApprovers;
     mapping(address approver => euint8 tier)              private _approverTiers;
     mapping(address approver => bool configured)          private _approverTierConfigured;
+    // Per-payment access for FULL auditors — set at recording time (existing auditors) or via
+    // grantHistoricalAccess (late-added auditors). Prevents a FULL auditor added after a payment
+    // from reading records they were never scoped into.
+    mapping(address auditor  => mapping(uint256 paymentId => bool granted)) private _paymentAccessGranted;
 
     // ─── Events ──────────────────────────────────────────────────────────────
 
@@ -339,6 +343,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             FHE.allow(p.amount,    auditor);
             FHE.allow(p.category,  auditor);
             FHE.allow(p.authLevel, auditor);
+            _paymentAccessGranted[auditor][paymentIds[i]] = true; // Solidity gate mirrors FHE ACL grant
         }
         emit HistoricalAccessGranted(auditor, paymentIds.length);
     }
@@ -398,9 +403,20 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             euint64 authU64  = FHE.asEuint64(payment.authLevel);
             FHE.allowThis(breach);
             FHE.allow(breach, reviewTestRegistry);
-            FHE.allow(breach, msg.sender);
+            FHE.allow(breach, msg.sender); // approver can decrypt their own result
             FHE.allowThis(authU64);
             FHE.allow(authU64, reviewTestRegistry);
+
+            // Grant all ANALYTICS/FULL auditors decrypt access to the breach ebool.
+            // Without this cryptographic grant, auditors can reach getAuthBreachResult()
+            // in storage but the FHEVM ACL will block decryption — dead end at the ACL layer.
+            for (uint256 i = 0; i < _auditors.length; i++) {
+                AuditorAccess access = auditorAccess[_auditors[i]];
+                if (access == AuditorAccess.ANALYTICS || access == AuditorAccess.FULL) {
+                    FHE.allow(breach, _auditors[i]);
+                }
+            }
+
             IReviewTestRegistry(reviewTestRegistry).storeAuthBreachResult(
                 paymentId, msg.sender, breach, authU64
             );
@@ -486,7 +502,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         )
     {
         PaymentRecord storage payment = _payments[paymentId];
-        if (!_canReadPayment(payment, msg.sender)) revert Unauthorized();
+        if (!_canReadPayment(payment, paymentId, msg.sender)) revert Unauthorized();
         return (
             payment.sender,
             payment.recipient,
@@ -507,7 +523,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         returns (euint64 amount, euint8 category, euint8 authLevel)
     {
         PaymentRecord storage payment = _payments[paymentId];
-        if (!_canReadPayment(payment, msg.sender)) revert Unauthorized();
+        if (!_canReadPayment(payment, paymentId, msg.sender)) revert Unauthorized();
         return (payment.amount, payment.category, payment.authLevel);
     }
 
@@ -544,7 +560,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         if (findingId >= _findings.length) revert PaymentNotFound();
         Finding storage finding = _findings[findingId];
         PaymentRecord storage payment = _payments[finding.paymentId];
-        if (!_canReadPayment(payment, msg.sender)) revert Unauthorized();
+        if (!_canReadPayment(payment, finding.paymentId, msg.sender)) revert Unauthorized();
         return (
             finding.paymentId,
             finding.testType,
@@ -706,6 +722,10 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
                 FHE.allow(payment.amount,    auditor);
                 FHE.allow(payment.category,  auditor);
                 FHE.allow(payment.authLevel, auditor);
+                // Record Solidity-level access so _canReadPayment scopes correctly.
+                // Only auditors present at recording time get auto-access; late-added FULL
+                // auditors must go through grantHistoricalAccess.
+                _paymentAccessGranted[auditor][_payments.length - 1] = true;
             }
         }
     }
@@ -777,13 +797,21 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
 
     /// @notice Checks if an account can read a specific payment's data.
     ///         ReviewTestRegistry gets unconditional read access for test evaluation.
-    function _canReadPayment(PaymentRecord storage payment, address account) private view returns (bool) {
-        return
+    ///         FULL auditors: must have been present at recording time (auto-granted) or
+    ///         explicitly scoped via grantHistoricalAccess for late-added auditors.
+    function _canReadPayment(PaymentRecord storage payment, uint256 paymentId, address account) private view returns (bool) {
+        if (
             account == owner ||
             account == payment.sender ||
             account == payment.recipient ||
-            account == reviewTestRegistry ||
-            auditorAccess[account] == AuditorAccess.FULL;
+            account == reviewTestRegistry
+        ) return true;
+
+        // FULL auditors: check per-payment access grant (set at recording time or via grantHistoricalAccess)
+        if (auditorAccess[account] == AuditorAccess.FULL) {
+            return _paymentAccessGranted[account][paymentId];
+        }
+        return false;
     }
 
     function _canReadAnalytics(address account) private view returns (bool) {
