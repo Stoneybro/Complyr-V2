@@ -238,17 +238,10 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         if (msg.sender != address(auditRegistry)) revert Unauthorized();
 
         // Read payment data once — shared across all auditor iterations
-        (euint64 amount, /* category unused directly */, euint8 authLevel) =
+        (euint64 amount, , ) =
             auditRegistry.getPaymentHandles(paymentId);
-        (
-            ,
-            address recipient,
-            ,
-            bytes32 invoiceHash,
-            ,
-            ,
-            bool approved
-        ) = auditRegistry.getPaymentMeta(paymentId);
+        (, address recipient, , bytes32 invoiceHash, , ,) =
+            auditRegistry.getPaymentMeta(paymentId);
 
         uint256 auditorCount;
 
@@ -265,19 +258,11 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
             _evaluateEncryptedTest(auditor, paymentId, uint8(TestType.MATERIALITY), amount, recipient);
 
             // ── Test 1: AUTHORIZATION_BREACH ────────────────────────────────
-            // Assertion: Authorization — "does this payment need human authorization?"
-            // V1: fires when authLevel > ROUTINE (i.e. amount > manager threshold) AND !approved
-            // !approved is always true at creation (approved is only set via approvePayment).
-            // Upcast euint8 authLevel → euint64 to match _evaluateEncryptedTest signature.
-            if (!approved) {
-                _evaluateEncryptedTest(
-                    auditor,
-                    paymentId,
-                    uint8(TestType.AUTHORIZATION_BREACH),
-                    FHE.asEuint64(authLevel), // upcast: authLevel is euint8, function expects euint64
-                    recipient
-                );
-            }
+            // Assertion: Authorization — "approver's encrypted tier < payment's encrypted authLevel?"
+            // No longer fires from evaluateAll(). Fires from AuditRegistry.approvePayment() via
+            // storeAuthBreachResult() — the only point where both the approver's encrypted tier
+            // and the payment's encrypted authLevel are available for a genuine FHE comparison.
+            // See AuditRegistry.setApproverTier() for tier configuration.
 
             // ── Test 2: SEGREGATION_OF_DUTIES ──────────────────────────────
             // Assertion: Authorization — "did the same person initiate and approve?"
@@ -391,6 +376,34 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
             bytes32(0),
             msg.sender
         );
+    }
+
+    // ─── Authorization Breach Result Storage (called by AuditRegistry.approvePayment) ──
+
+    /// @notice Stores a pre-computed AUTHORIZATION_BREACH result from AuditRegistry.
+    ///         AuditRegistry performs FHE.lt(approverTier, authLevel) in its own context
+    ///         because it holds allowThis on both handles. The result ebool and the authLevel
+    ///         handle are passed in with ACL grants already issued before this call.
+    ///         breach = true: approver's tier was BELOW the payment's required authLevel.
+    ///         breach = false: approver had sufficient authority — no finding will be created.
+    function storeAuthBreachResult(
+        uint256 paymentId,
+        address approver,
+        ebool   breach,
+        euint64 authLevelHandle
+    ) external {
+        if (msg.sender != address(auditRegistry)) revert Unauthorized();
+        uint8 testType = uint8(TestType.AUTHORIZATION_BREACH);
+
+        _testResults[approver][paymentId][testType]  = breach;
+        _testedValues[approver][paymentId][testType] = authLevelHandle;
+        _hasTestResult[approver][paymentId][testType] = true;
+
+        FHE.allowThis(breach);
+        FHE.allowThis(authLevelHandle);
+        FHE.allow(breach, approver);
+
+        emit TestEvaluated(approver, paymentId, testType, breach);
     }
 
     // ─── View Functions ──────────────────────────────────────────────────────

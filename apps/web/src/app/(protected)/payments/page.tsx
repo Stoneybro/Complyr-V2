@@ -67,7 +67,10 @@ export default function Page() {
                 )}
 
                 {activeView === "audits" && (
-                  <AuditOverview auditRegistryAddress={auditRegistryAddress} />
+                  <AuditOverview 
+                    auditRegistryAddress={auditRegistryAddress} 
+                    businessAddress={walletAddress}
+                  />
                 )}
 
                 {activeView === "transactions" && (

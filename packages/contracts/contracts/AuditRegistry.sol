@@ -6,6 +6,7 @@ import {
     ebool,
     euint8,
     euint64,
+    externalEuint8,
     externalEuint64
 } from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig, ZamaConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
@@ -23,6 +24,7 @@ interface IConfidentialFungibleTokenReceiver {
 interface IReviewTestRegistry {
     function evaluateAll(uint256 paymentId) external;
     function createSodFinding(uint256 paymentId, address auditor) external;
+    function storeAuthBreachResult(uint256 paymentId, address approver, ebool breach, euint64 authLevelHandle) external;
 }
 
 /// @notice Minimal interface for forwarding cUSDC to the actual recipient after audit recording.
@@ -145,6 +147,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     mapping(address auditor  => bool listed)             private _auditorListed;
     mapping(address auditor  => uint256[] findingIds)    private _auditorFindings;
     mapping(address approver => bool authorized)          public  authorizedApprovers;
+    mapping(address approver => euint8 tier)              private _approverTiers;
+    mapping(address approver => bool configured)          private _approverTierConfigured;
 
     // ─── Events ──────────────────────────────────────────────────────────────
 
@@ -154,8 +158,11 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     event PaymentRecorded(uint256 indexed paymentId, address indexed sender, address indexed recipient);
     event PaymentApproved(uint256 indexed paymentId, address indexed approver);
     event FindingCreated(uint256 indexed findingId, uint256 indexed paymentId, uint8 testType, uint8 severity);
+    event FindingEscalated(uint256 indexed findingId, address indexed escalatedBy);
     event ReviewTestRegistrySet(address indexed registry);
     event ApproverAuthorizationSet(address indexed approver, bool authorized);
+    event ApproverTierSet(address indexed approver);
+    event HistoricalAccessGranted(address indexed auditor, uint256 recordCount);
 
     // ─── Errors ──────────────────────────────────────────────────────────────
 
@@ -237,6 +244,27 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit ApproverAuthorizationSet(approver, authorized);
     }
 
+    /// @notice Sets an encrypted authority tier for an authorized approver.
+    ///         Tier values map to the AuthLevel enum: 0=ROUTINE, 1=MANAGER, 2=DIRECTOR, 3=BOARD.
+    ///         Must be called after setAuthorizedApprover — approver must already be authorized.
+    ///         Used in approvePayment() for AUTHORIZATION_BREACH detection: if approver tier <
+    ///         payment authLevel, an encrypted breach ebool is recorded in ReviewTestRegistry
+    ///         without ever revealing either value in plaintext.
+    function setApproverTier(
+        address        approver,
+        externalEuint8 tier,
+        bytes calldata inputProof
+    ) external onlyOwner {
+        if (approver == address(0)) revert InvalidAddress();
+        if (!authorizedApprovers[approver]) revert Unauthorized();
+        euint8 encTier = FHE.fromExternal(tier, inputProof);
+        _approverTiers[approver]         = encTier;
+        _approverTierConfigured[approver] = true;
+        FHE.allowThis(encTier);
+        FHE.allow(encTier, approver);
+        emit ApproverTierSet(approver);
+    }
+
     /// @notice Grants an external human auditor access to payment data.
     ///         ReviewTestRegistry access is handled separately — do NOT pass it here.
     ///         Cap: MAX_AUDITORS (5) external auditors per registry.
@@ -292,6 +320,29 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit AuthThresholdsSet(msg.sender);
     }
 
+    /// @notice Grants FHE ACL access to specific historical payment records for an auditor.
+    ///         Gas cost is O(records disclosed), not O(all history) — caller specifies exactly
+    ///         which paymentIds to disclose. Matches real audit methodology: auditors work from
+    ///         a defined engagement scope, not a blanket history dump.
+    ///         Only FULL auditors get per-payment handle access; ANALYTICS tier is rollups-only.
+    ///         onlyOwner — business controls what historical records external auditors can see.
+    function grantHistoricalAccess(
+        address   auditor,
+        uint256[] calldata paymentIds
+    ) external onlyOwner {
+        AuditorAccess access = auditorAccess[auditor];
+        if (access == AuditorAccess.NONE) revert Unauthorized();
+        if (access != AuditorAccess.FULL) revert Unauthorized(); // only FULL gets per-payment handles
+        for (uint256 i = 0; i < paymentIds.length; i++) {
+            if (paymentIds[i] >= _payments.length) revert PaymentNotFound();
+            PaymentRecord storage p = _payments[paymentIds[i]];
+            FHE.allow(p.amount,    auditor);
+            FHE.allow(p.category,  auditor);
+            FHE.allow(p.authLevel, auditor);
+        }
+        emit HistoricalAccessGranted(auditor, paymentIds.length);
+    }
+
     // ─── Payment Entry Point (sole path — no self-reporting) ─────────────────
 
     /// @notice Called by ConfidentialUSDC after a confidentialTransferAndCallWithAudit.
@@ -311,8 +362,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     // ─── Payment Approval ────────────────────────────────────────────────────
 
     /// @notice The only path to set approved=true and approver on a payment.
-    ///         Caller must not be the payment sender (segregation of duties).
-    ///         ReviewTestRegistry checks for SoD violations via createSodFinding separately.
+    ///         Two detective SoD checks run here (sender==approver, recipient==approver).
+    ///         If the approver has a configured encrypted tier, an AUTHORIZATION_BREACH
+    ///         result is computed via FHE and stored in ReviewTestRegistry for auditor review.
     function approvePayment(uint256 paymentId) external paymentExists(paymentId) {
         // Access control: only addresses explicitly authorized by the business owner
         // can approve payments. This prevents arbitrary wallets from flipping approved=true.
@@ -321,15 +373,39 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         PaymentRecord storage payment = _payments[paymentId];
         if (payment.approved) revert PaymentAlreadyApproved();
 
-        // SoD check: if the authorized approver is also the payment sender,
-        // create a Segregation of Duties finding. Approval still goes through —
-        // this is a detective control, not a preventive block.
+        // SoD check — sender == approver: initiator cannot self-authorize.
+        // Detective control — approval goes through; a finding is created.
         if (msg.sender == payment.sender && reviewTestRegistry != address(0)) {
+            IReviewTestRegistry(reviewTestRegistry).createSodFinding(paymentId, msg.sender);
+        }
+
+        // SoD check — recipient == approver: covers self-dealing / collusion
+        // (Authorization + Existence assertions). Separate finding from sender-SoD.
+        if (msg.sender == payment.recipient && reviewTestRegistry != address(0)) {
             IReviewTestRegistry(reviewTestRegistry).createSodFinding(paymentId, msg.sender);
         }
 
         payment.approved = true;
         payment.approver = msg.sender;
+
+        // Authorization breach check — compare approver's encrypted tier against payment's
+        // encrypted authLevel. FHE computation runs in AuditRegistry context because this
+        // contract holds allowThis on both handles. ReviewTestRegistry stores the result.
+        // Only runs if the approver has a configured tier (prevents ops on zero handles).
+        if (reviewTestRegistry != address(0) && _approverTierConfigured[msg.sender]) {
+            // lt(approverTier, authLevel): true = approver's authority is BELOW required level
+            ebool breach     = FHE.lt(_approverTiers[msg.sender], payment.authLevel);
+            euint64 authU64  = FHE.asEuint64(payment.authLevel);
+            FHE.allowThis(breach);
+            FHE.allow(breach, reviewTestRegistry);
+            FHE.allow(breach, msg.sender);
+            FHE.allowThis(authU64);
+            FHE.allow(authU64, reviewTestRegistry);
+            IReviewTestRegistry(reviewTestRegistry).storeAuthBreachResult(
+                paymentId, msg.sender, breach, authU64
+            );
+        }
+
         emit PaymentApproved(paymentId, msg.sender);
     }
 
@@ -347,6 +423,20 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     ) external {
         if (msg.sender != reviewTestRegistry) revert NotReviewRegistry();
         _createFinding(paymentId, testType, severity, flaggedHandle, narrativeHash, auditor);
+    }
+
+    /// @notice Escalates a finding to board-level attention.
+    ///         Only owner or FULL auditors can escalate; only CRITICAL severity (== 3) findings
+    ///         are eligible. Escalation is immutable — idempotent on double-call.
+    ///         Severity 3 maps to Priority.CRITICAL in ReviewTestRegistry.
+    function escalateFinding(uint256 findingId) external {
+        if (findingId >= _findings.length) revert PaymentNotFound();
+        if (msg.sender != owner && auditorAccess[msg.sender] != AuditorAccess.FULL) revert Unauthorized();
+        Finding storage finding = _findings[findingId];
+        if (finding.severity != 3) revert Unauthorized(); // only CRITICAL findings may be escalated
+        if (finding.escalated) return;                    // idempotent — no revert on repeat call
+        finding.escalated = true;
+        emit FindingEscalated(findingId, msg.sender);
     }
 
     // ─── View Functions ──────────────────────────────────────────────────────
@@ -436,6 +526,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     }
 
     /// @notice Returns finding metadata. Access: owner, payment sender/recipient, or FULL auditor.
+    ///         Includes the encrypted flaggedHandle — requires FULL access.
+    ///         For SIGNAL/ANALYTICS auditors, use getFindingSignal() instead.
     function getFinding(uint256 findingId)
         external
         view
@@ -464,6 +556,21 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         );
     }
 
+    /// @notice Returns plaintext finding metadata for SIGNAL-tier auditors and above.
+    ///         Returns testType, severity, block, and paymentId — NOT the encrypted flaggedHandle.
+    ///         This fulfils the SIGNAL tier promise ("findings feed") without requiring FULL access.
+    ///         Gate: caller must have any access level other than NONE, or be the owner.
+    function getFindingSignal(uint256 findingId)
+        external
+        view
+        returns (uint8 testType, uint8 severity, uint32 triggeredAtBlock, uint256 paymentId)
+    {
+        if (findingId >= _findings.length) revert PaymentNotFound();
+        if (auditorAccess[msg.sender] == AuditorAccess.NONE && msg.sender != owner) revert Unauthorized();
+        Finding storage f = _findings[findingId];
+        return (f.testType, f.severity, f.triggeredAtBlock, f.paymentId);
+    }
+
     // ─── Internal: Payment Recording ─────────────────────────────────────────
 
     function _recordPayment(
@@ -474,12 +581,23 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         if (!authThresholdsConfigured) revert ThresholdsNotConfigured();
         if (fields.recipient == address(0)) revert InvalidAddress();
 
+        // Category range validation — clamp any encrypted value >= CATEGORY_BUCKETS to OTHER (7).
+        // Without this, an out-of-range category silently matches no rollup bucket and disappears
+        // from all analytics and CATEGORY_CONCENTRATION testing while remaining a valid payment.
+        // FHE.select avoids decrypting the submitted value at any point.
+        ebool  validCategory = FHE.lt(fields.category, FHE.asEuint8(CATEGORY_BUCKETS));
+        euint8 safeCategory  = FHE.select(
+            validCategory,
+            fields.category,
+            FHE.asEuint8(uint8(Category.OTHER))
+        );
+
         euint8 derivedAuthLevel = _deriveAuthLevel(amount);
 
         uint256 paymentId = _payments.length;
         _payments.push(PaymentRecord({
             amount:      amount,
-            category:    fields.category,
+            category:    safeCategory,
             authLevel:   derivedAuthLevel,
             sender:      sender,
             recipient:   fields.recipient,
@@ -578,16 +696,16 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             FHE.allow(payment.authLevel, reviewTestRegistry);
         }
 
-        // External human auditors (capped at 5)
+        // External human auditors (capped at 5).
+        // ANALYTICS tier: rollup totals only (via getCategoryTotal/getRecipientTotal).
+        // Per-payment handles (amount/category/authLevel) are FULL-only — ANALYTICS has no
+        // getter path to retrieve individual payment handles, so granting them is dead weight.
         for (uint256 i = 0; i < _auditors.length; i++) {
             address auditor = _auditors[i];
-            AuditorAccess access = auditorAccess[auditor];
-            if (access == AuditorAccess.ANALYTICS || access == AuditorAccess.FULL) {
+            if (auditorAccess[auditor] == AuditorAccess.FULL) {
+                FHE.allow(payment.amount,    auditor);
                 FHE.allow(payment.category,  auditor);
                 FHE.allow(payment.authLevel, auditor);
-            }
-            if (access == AuditorAccess.FULL) {
-                FHE.allow(payment.amount, auditor);
             }
         }
     }

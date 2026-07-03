@@ -257,6 +257,7 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
   };
 
   const confirmGrantAccess = () => {
+    if (!auditRegistryAddress) return;
     const checksumAddress = getAddress(newAddress) as `0x${string}`;
     reset();
     setPendingAction({ type: "grant", address: checksumAddress });
