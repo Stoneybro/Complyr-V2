@@ -21,7 +21,7 @@ pragma solidity ^0.8.27;
 interface IAuditRegistryInit {
     function initialize(address confidentialToken, address initialOwner) external;
     function setReviewTestRegistry(address registry) external;
-    function setAuditorAccess(address auditor, uint8 access) external;
+    function setAuditorAccess(address auditor, uint8 access, uint32 engagementId) external;
     function transferOwnership(address newOwner) external;
 }
 

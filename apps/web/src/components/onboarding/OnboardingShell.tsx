@@ -5,7 +5,7 @@ import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { DeployRegistryStep } from "@/components/onboarding/DeployRegistryStep";
-import { SetThresholdsStep } from "@/components/onboarding/SetThresholdsStep";
+import { InitializeDefaultsStep } from "@/components/onboarding/InitializeDefaultsStep";
 import { DeactivatedStep } from "@/components/onboarding/DeactivatedStep";
 import { SkeletonPage } from "@/components/ui/skeleton-page";
 import { WrongNetworkPage } from "@/components/auth/WrongNetworkPage";
@@ -42,7 +42,7 @@ interface OnboardingShellProps {
  *   wrong-network    → WrongNetworkPage (standalone)
  *   deactivated      → DeactivatedStep (standalone)
  *   deploy-registry  → DeployRegistryStep (Step 1, split-panel)
- *   set-thresholds   → SetThresholdsStep  (Step 2, split-panel)
+ *   set-thresholds   → InitializeDefaultsStep  (Step 2, split-panel)
  *   ready            → children({ walletAddress, auditRegistryAddress, reviewRegistryAddress })
  */
 export function OnboardingShell({ children, onPhaseChange }: OnboardingShellProps) {
@@ -109,7 +109,7 @@ export function OnboardingShell({ children, onPhaseChange }: OnboardingShellProp
       )}
 
       {state.phase === "set-thresholds" && (
-        <SetThresholdsStep
+        <InitializeDefaultsStep
           auditRegistryAddress={state.auditRegistryAddress}
           walletAddress={state.walletAddress}
           onConfigured={refetch}

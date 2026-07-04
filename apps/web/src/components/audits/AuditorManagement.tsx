@@ -261,11 +261,14 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     const checksumAddress = getAddress(newAddress) as `0x${string}`;
     reset();
     setPendingAction({ type: "grant", address: checksumAddress });
+    // Generate a random 32-bit integer for the engagement ID (1 to 4,294,967,295)
+    const generatedEngagementId = Math.floor(Math.random() * 4294967295) + 1;
+
     writeContract({
       address: auditRegistryAddress,
       abi: auditRegistryAbi,
       functionName: "setAuditorAccess",
-      args: [checksumAddress, mapAccessStringToEnum(newAccess)],
+      args: [checksumAddress, mapAccessStringToEnum(newAccess), generatedEngagementId],
       chainId: sepolia.id,
     });
     setGrantDialogOpen(false);
@@ -295,7 +298,7 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
       address: auditRegistryAddress,
       abi: auditRegistryAbi,
       functionName: "setAuditorAccess",
-      args: [auditorToRevoke, AuditorAccess.NONE],
+      args: [auditorToRevoke, AuditorAccess.NONE, 0], // 0 engagement ID for revoked
       chainId: sepolia.id,
     });
     setRevokeDialogOpen(false);

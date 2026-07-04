@@ -81,6 +81,11 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
 
     // ─── Structs ─────────────────────────────────────────────────────────────
 
+    struct AuditorProfile {
+        AuditorAccess access;
+        uint248       engagementId;
+    }
+
     /// @notice The canonical payment record. Immutable after creation except for
     ///         the approved/approver fields which are set via approvePayment().
     struct PaymentRecord {
@@ -112,6 +117,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         uint32  triggeredAtBlock;
         bytes32 narrativeHash;    // Optional: keccak256 of auditor's written finding narrative
         bool    escalated;
+        address triggeredBy;      // Who triggered it
+        bool    isShared;         // Whether this is a globally shared finding
     }
 
     // ─── Constants ───────────────────────────────────────────────────────────
@@ -141,7 +148,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     address[]       private _auditors; // External human auditors only; capped at MAX_AUDITORS
 
     // Mappings
-    mapping(address auditor  => AuditorAccess access)   public  auditorAccess;
+    mapping(address auditor  => AuditorProfile profile) public  auditorProfile;
     mapping(uint8   category => euint64 total)           private _categoryTotals;
     mapping(address recipient => euint64 total)          private _recipientTotals;
     mapping(address auditor  => bool listed)             private _auditorListed;
@@ -157,7 +164,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     // ─── Events ──────────────────────────────────────────────────────────────
 
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
-    event AuditorAccessSet(address indexed auditor, AuditorAccess access);
+    event AuditorAccessSet(address indexed auditor, AuditorAccess access, uint32 engagementId);
     event AuthThresholdsSet(address indexed by);
     event PaymentRecorded(uint256 indexed paymentId, address indexed sender, address indexed recipient);
     event PaymentApproved(uint256 indexed paymentId, address indexed approver);
@@ -272,7 +279,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     /// @notice Grants an external human auditor access to payment data.
     ///         ReviewTestRegistry access is handled separately — do NOT pass it here.
     ///         Cap: MAX_AUDITORS (5) external auditors per registry.
-    function setAuditorAccess(address auditor, AuditorAccess access) external onlyOwner {
+    function setAuditorAccess(address auditor, AuditorAccess access, uint32 engagementId) external onlyOwner {
         if (auditor == address(0)) revert InvalidAddress();
 
         if (access == AuditorAccess.NONE) {
@@ -286,8 +293,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
                     }
                 }
             }
-            auditorAccess[auditor] = AuditorAccess.NONE;
-            emit AuditorAccessSet(auditor, access);
+            auditorProfile[auditor] = AuditorProfile(AuditorAccess.NONE, 0);
+            emit AuditorAccessSet(auditor, access, 0);
             return;
         }
 
@@ -296,8 +303,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             _auditorListed[auditor] = true;
             _auditors.push(auditor);
         }
-        auditorAccess[auditor] = access;
-        emit AuditorAccessSet(auditor, access);
+        auditorProfile[auditor] = AuditorProfile(access, engagementId);
+        emit AuditorAccessSet(auditor, access, engagementId);
     }
 
     /// @notice Sets the business's Delegation of Authority thresholds.
@@ -334,7 +341,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         address   auditor,
         uint256[] calldata paymentIds
     ) external onlyOwner {
-        AuditorAccess access = auditorAccess[auditor];
+        AuditorAccess access = auditorProfile[auditor].access;
         if (access == AuditorAccess.NONE) revert Unauthorized();
         if (access != AuditorAccess.FULL) revert Unauthorized(); // only FULL gets per-payment handles
         for (uint256 i = 0; i < paymentIds.length; i++) {
@@ -411,7 +418,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             // Without this cryptographic grant, auditors can reach getAuthBreachResult()
             // in storage but the FHEVM ACL will block decryption — dead end at the ACL layer.
             for (uint256 i = 0; i < _auditors.length; i++) {
-                AuditorAccess access = auditorAccess[_auditors[i]];
+                AuditorAccess access = auditorProfile[_auditors[i]].access;
                 if (access == AuditorAccess.ANALYTICS || access == AuditorAccess.FULL) {
                     FHE.allow(breach, _auditors[i]);
                 }
@@ -435,10 +442,11 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         uint8   severity,
         euint64 flaggedHandle,
         bytes32 narrativeHash,
-        address auditor
+        address auditor,
+        bool    isShared
     ) external {
         if (msg.sender != reviewTestRegistry) revert NotReviewRegistry();
-        _createFinding(paymentId, testType, severity, flaggedHandle, narrativeHash, auditor);
+        _createFinding(paymentId, testType, severity, flaggedHandle, narrativeHash, auditor, isShared);
     }
 
     /// @notice Escalates a finding to board-level attention.
@@ -447,7 +455,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     ///         Severity 3 maps to Priority.CRITICAL in ReviewTestRegistry.
     function escalateFinding(uint256 findingId) external {
         if (findingId >= _findings.length) revert PaymentNotFound();
-        if (msg.sender != owner && auditorAccess[msg.sender] != AuditorAccess.FULL) revert Unauthorized();
+        if (msg.sender != owner && auditorProfile[msg.sender].access != AuditorAccess.FULL) revert Unauthorized();
         Finding storage finding = _findings[findingId];
         if (finding.severity != 3) revert Unauthorized(); // only CRITICAL findings may be escalated
         if (finding.escalated) return;                    // idempotent — no revert on repeat call
@@ -554,7 +562,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             euint64 flaggedHandle,
             uint32  triggeredAtBlock,
             bytes32 narrativeHash,
-            bool    escalated
+            bool    escalated,
+            address triggeredBy,
+            bool    isShared
         )
     {
         if (findingId >= _findings.length) revert PaymentNotFound();
@@ -568,7 +578,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             finding.flaggedHandle,
             finding.triggeredAtBlock,
             finding.narrativeHash,
-            finding.escalated
+            finding.escalated,
+            finding.triggeredBy,
+            finding.isShared
         );
     }
 
@@ -579,12 +591,12 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     function getFindingSignal(uint256 findingId)
         external
         view
-        returns (uint8 testType, uint8 severity, uint32 triggeredAtBlock, uint256 paymentId)
+        returns (uint8 testType, uint8 severity, uint32 triggeredAtBlock, uint256 paymentId, address triggeredBy, bool isShared)
     {
         if (findingId >= _findings.length) revert PaymentNotFound();
-        if (auditorAccess[msg.sender] == AuditorAccess.NONE && msg.sender != owner) revert Unauthorized();
+        if (auditorProfile[msg.sender].access == AuditorAccess.NONE && msg.sender != owner) revert Unauthorized();
         Finding storage f = _findings[findingId];
-        return (f.testType, f.severity, f.triggeredAtBlock, f.paymentId);
+        return (f.testType, f.severity, f.triggeredAtBlock, f.paymentId, f.triggeredBy, f.isShared);
     }
 
     // ─── Internal: Payment Recording ─────────────────────────────────────────
@@ -718,7 +730,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         // getter path to retrieve individual payment handles, so granting them is dead weight.
         for (uint256 i = 0; i < _auditors.length; i++) {
             address auditor = _auditors[i];
-            if (auditorAccess[auditor] == AuditorAccess.FULL) {
+            if (auditorProfile[auditor].access == AuditorAccess.FULL) {
                 FHE.allow(payment.amount,    auditor);
                 FHE.allow(payment.category,  auditor);
                 FHE.allow(payment.authLevel, auditor);
@@ -742,7 +754,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
 
         for (uint256 i = 0; i < _auditors.length; i++) {
             address auditor = _auditors[i];
-            AuditorAccess access = auditorAccess[auditor];
+            AuditorAccess access = auditorProfile[auditor].access;
             if (access == AuditorAccess.ANALYTICS || access == AuditorAccess.FULL) {
                 FHE.allow(handle, auditor);
             }
@@ -760,7 +772,8 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         uint8   severity,
         euint64 flaggedHandle,
         bytes32 narrativeHash,
-        address triggeringAuditor
+        address triggeringAuditor,
+        bool    isShared
     ) private {
         uint256 findingId = _findings.length;
         _findings.push(Finding({
@@ -770,7 +783,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
             flaggedHandle:    flaggedHandle,
             triggeredAtBlock: uint32(block.number),
             narrativeHash:    narrativeHash,
-            escalated:        false
+            escalated:        false,
+            triggeredBy:      triggeringAuditor,
+            isShared:         isShared
         }));
 
         PaymentRecord storage payment = _payments[paymentId];
@@ -779,10 +794,15 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         FHE.allow(flaggedHandle, payment.recipient);
         FHE.allow(flaggedHandle, triggeringAuditor);
 
-        // All auditors with at least SIGNAL access see this finding in their feed
+        // All auditors with at least SIGNAL access see this finding in their feed if in scope
+        uint248 triggeringEngagement = auditorProfile[triggeringAuditor].engagementId;
         for (uint256 i = 0; i < _auditors.length; i++) {
-            if (auditorAccess[_auditors[i]] != AuditorAccess.NONE) {
-                _auditorFindings[_auditors[i]].push(findingId);
+            address aud = _auditors[i];
+            if (auditorProfile[aud].access != AuditorAccess.NONE) {
+                bool isSameEngagement = auditorProfile[aud].engagementId == triggeringEngagement;
+                if (isShared || isSameEngagement) {
+                    _auditorFindings[aud].push(findingId);
+                }
             }
         }
         // Also add to the triggering auditor (in case they're not in _auditors — e.g. ReviewTestRegistry itself for SoD)
@@ -808,14 +828,14 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         ) return true;
 
         // FULL auditors: check per-payment access grant (set at recording time or via grantHistoricalAccess)
-        if (auditorAccess[account] == AuditorAccess.FULL) {
+        if (auditorProfile[account].access == AuditorAccess.FULL) {
             return _paymentAccessGranted[account][paymentId];
         }
         return false;
     }
 
     function _canReadAnalytics(address account) private view returns (bool) {
-        AuditorAccess access = auditorAccess[account];
+        AuditorAccess access = auditorProfile[account].access;
         return
             account == owner ||
             account == reviewTestRegistry ||

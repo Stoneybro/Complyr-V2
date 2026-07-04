@@ -9,12 +9,12 @@ const STEPS = [
   {
     num: 1 as const,
     title: "Deploy Account",
-    desc: "Create your onchain smart registry",
+    desc: "Self-register and deploy your account.",
   },
   {
     num: 2 as const,
-    title: "Configure Policy",
-    desc: "Set your authorization thresholds",
+    title: "Initialize Defaults",
+    desc: "Set initial thresholds and configure.",
   },
 ];
 

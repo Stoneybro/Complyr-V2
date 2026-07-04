@@ -9,7 +9,7 @@ import {ZamaEthereumConfig, ZamaConfig} from "../fhevmTemp/@fhevm/solidity/confi
 // and write findings back to AuditRegistry.
 // ─────────────────────────────────────────────────────────────────────────────
 interface IAuditRegistry {
-    function auditorAccess(address auditor) external view returns (uint8);
+    function auditorProfile(address auditor) external view returns (uint8 access, uint248 engagementId);
 
     function getPaymentHandles(uint256 paymentId)
         external
@@ -38,7 +38,8 @@ interface IAuditRegistry {
         uint8   severity,
         euint64 flaggedHandle,
         bytes32 narrativeHash,
-        address auditor
+        address auditor,
+        bool    isShared
     ) external;
 }
 
@@ -330,7 +331,8 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
             uint8(Priority.CRITICAL), // SoD is always critical severity
             amount,
             bytes32(0),
-            auditor
+            auditor,
+            true // isShared = true for SoD
         );
     }
 
@@ -380,7 +382,8 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
             uint8(testConfig.priority),
             flaggedHandle,
             bytes32(0),
-            msg.sender
+            msg.sender,
+            false // isShared = false for auditor-specific tests
         );
     }
 
@@ -511,7 +514,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     }
 
     function _isApprovedAuditor(address auditor) private view returns (bool) {
-        uint8 access = auditRegistry.auditorAccess(auditor);
+        (uint8 access, ) = auditRegistry.auditorProfile(auditor);
         return access == 2 || access == 3; // ANALYTICS or FULL
     }
 

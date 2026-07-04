@@ -49,7 +49,11 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
-export type AppView = "payments" | "audits" | "transactions";
+import {
+  Settings,
+} from "lucide-react";
+
+export type AppView = "payments" | "audits" | "transactions" | "settings";
 
 const navItems: {
   id: AppView;
@@ -59,6 +63,7 @@ const navItems: {
   { id: "payments", title: "Payments", icon: CreditCard },
   { id: "audits", title: "Audits", icon: FileSearchCorner },
   { id: "transactions", title: "Transactions", icon: ArrowLeftRight },
+  { id: "settings", title: "Settings", icon: Settings },
 ];
 
 type AppSidebarProps = {

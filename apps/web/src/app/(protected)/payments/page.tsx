@@ -13,11 +13,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { AuditOverview } from "@/components/audits/AuditOverview";
 import { ArrowLeftRight } from "lucide-react";
 
+import { SettingsView } from "@/components/settings/SettingsView";
+
 // View titles
 const viewMeta: Record<AppView, { title: string; description: string }> = {
   payments: { title: "Payments", description: "Send and manage onchain payments." },
   audits: { title: "Audits", description: "Review encrypted audit records." },
   transactions: { title: "Transactions", description: "View your transaction history." },
+  settings: { title: "Settings", description: "Manage business registry and approvers." },
 };
 
 export default function Page() {
@@ -78,6 +81,13 @@ export default function Page() {
                     icon={<ArrowLeftRight className="h-5 w-5" />}
                     title="No transactions yet"
                     description="Your onchain transaction history will appear here after your first payment."
+                  />
+                )}
+
+                {activeView === "settings" && (
+                  <SettingsView
+                    auditRegistryAddress={auditRegistryAddress}
+                    walletAddress={walletAddress}
                   />
                 )}
               </div>
