@@ -11,18 +11,23 @@ import {
 import { AuditorShell } from "@/components/auditors/AuditorShell";
 import { TestRules } from "@/components/auditors/TestRules";
 import { Findings } from "@/components/auditors/Findings";
+import { Analytics } from "@/components/auditors/Analytics";
+import { Payments } from "@/components/auditors/Payments";
 
 const viewMeta: Record<AuditorAppView, { title: string }> = {
-  rules: { title: "Test Rules" },
-  findings: { title: "Findings" },
+  tests:     { title: "Tests" },
+  findings:  { title: "Findings" },
+  analytics: { title: "Analytics" },
+  payments:  { title: "Payments" },
 };
 
 export default function AuditorPortalPage() {
   const params = useParams();
   const businessAddress = params?.wallet as `0x${string}`;
 
-  const [activeView, setActiveView] = useState<AuditorAppView>("rules");
+  const [activeView, setActiveView] = useState<AuditorAppView>("tests");
   const [isReady, setIsReady] = useState(false);
+  const [currentAccessLevel, setCurrentAccessLevel] = useState(0);
 
   const meta = viewMeta[activeView];
 
@@ -30,6 +35,7 @@ export default function AuditorPortalPage() {
     <SidebarProvider defaultOpen={true}>
       <AuditorSidebar
         activeView={activeView}
+        accessLevel={currentAccessLevel}
         onNavigate={setActiveView}
         isLocked={!isReady}
       />
@@ -51,27 +57,49 @@ export default function AuditorPortalPage() {
         {/* Content area — gated by AuditorShell */}
         <div className="flex flex-1 flex-col">
           {businessAddress ? (
-            <AuditorShell 
+            <AuditorShell
               businessAddress={businessAddress}
-              onPhaseChange={setIsReady}
+              onPhaseChange={(ready) => {
+                setIsReady(ready);
+              }}
             >
-              {({ reviewRegistryAddress, accessLevel }) => (
-                <div className="flex flex-1 flex-col px-6 py-4">
-                  {activeView === "rules" && (
-                    <TestRules 
-                      reviewRegistryAddress={reviewRegistryAddress}
-                      accessLevel={accessLevel}
-                    />
-                  )}
+              {({ auditRegistryAddress, reviewRegistryAddress, accessLevel, walletAddress, deployedAtBlock }) => {
+                // Sync accessLevel into state so the sidebar can read it
+                if (accessLevel !== currentAccessLevel) setCurrentAccessLevel(accessLevel);
 
-                  {activeView === "findings" && (
-                    <Findings 
-                      reviewRegistryAddress={reviewRegistryAddress}
-                      accessLevel={accessLevel}
-                    />
-                  )}
-                </div>
-              )}
+                return (
+                  <div className="flex flex-1 flex-col px-6 py-4">
+                    {activeView === "tests" && (
+                      <TestRules
+                        reviewRegistryAddress={reviewRegistryAddress}
+                        accessLevel={accessLevel}
+                      />
+                    )}
+
+                    {activeView === "findings" && (
+                      <Findings
+                        auditRegistryAddress={auditRegistryAddress}
+                        accessLevel={accessLevel}
+                        walletAddress={walletAddress}
+                      />
+                    )}
+
+                    {activeView === "analytics" && (
+                      <Analytics
+                        auditRegistryAddress={auditRegistryAddress}
+                        deployedAtBlock={deployedAtBlock}
+                      />
+                    )}
+
+                    {activeView === "payments" && accessLevel >= 3 && (
+                      <Payments
+                        auditRegistryAddress={auditRegistryAddress}
+                        walletAddress={walletAddress}
+                      />
+                    )}
+                  </div>
+                );
+              }}
             </AuditorShell>
           ) : (
              <div className="p-4 text-center text-muted-foreground">Invalid business address in URL.</div>

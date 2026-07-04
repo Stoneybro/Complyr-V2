@@ -80,7 +80,7 @@ export function useOnboardingState(): {
     refetch: refetchThresholds,
   } = useReadContract({
     address: reg?.auditRegistry,
-    abi: AuditRegistryAbi,
+    abi: AuditRegistryAbi.abi,
     functionName: "authThresholdsConfigured",
     chainId: sepolia.id,
     query: {

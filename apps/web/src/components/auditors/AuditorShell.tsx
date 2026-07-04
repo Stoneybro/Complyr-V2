@@ -16,6 +16,7 @@ interface AuditorShellProps {
     auditRegistryAddress: `0x${string}`;
     reviewRegistryAddress: `0x${string}`;
     accessLevel: number;
+    deployedAtBlock: bigint;
   }) => React.ReactNode;
   onPhaseChange?: (isReady: boolean) => void;
 }
@@ -57,8 +58,8 @@ export function AuditorShell({ businessAddress, children, onPhaseChange }: Audit
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Access Denied</h2>
           <p className="text-muted-foreground mb-6">
-            {state.phase === "business-not-found" 
-              ? "This business has not deployed a Complyr registry or it has been deactivated." 
+            {state.phase === "business-not-found"
+              ? "This business has not deployed a Complyr registry or it has been deactivated."
               : "You are not listed as an authorized auditor for this business. Please switch to an authorized wallet or ask the business owner for access."}
           </p>
           <Button variant="outline" onClick={() => disconnect()} className="gap-2">
@@ -78,6 +79,7 @@ export function AuditorShell({ businessAddress, children, onPhaseChange }: Audit
           auditRegistryAddress: state.auditRegistryAddress!,
           reviewRegistryAddress: state.reviewRegistryAddress!,
           accessLevel: state.accessLevel!,
+          deployedAtBlock: state.deployedAtBlock ?? 0n,
         })}
       </>
     );

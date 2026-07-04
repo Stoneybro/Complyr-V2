@@ -481,6 +481,14 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         return _auditorFindings[auditor][index];
     }
 
+    /// @notice Returns whether an auditor has been granted access to a specific payment.
+    ///         True if the auditor was present when the payment was recorded, or if
+    ///         grantHistoricalAccess was called for this auditor + paymentId pair.
+    ///         Use this on the frontend to check access without relying on revert-as-control-flow.
+    function paymentAccessGranted(address auditor, uint256 paymentId) external view returns (bool) {
+        return _paymentAccessGranted[auditor][paymentId];
+    }
+
     function auditorCount() external view returns (uint256) {
         return _auditors.length;
     }

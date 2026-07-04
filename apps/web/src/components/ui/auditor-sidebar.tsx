@@ -6,6 +6,9 @@ import {
   LogOut,
   FileSearchCorner,
   ListFilter,
+  BarChart2,
+  CreditCard,
+  ShieldAlert,
 } from "lucide-react";
 import { useDisconnect, useAccount } from "wagmi";
 import Image from "next/image";
@@ -37,20 +40,24 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type AuditorAppView = "rules" | "findings";
+export type AuditorAppView = "tests" | "findings" | "analytics" | "payments";
 
-const navItems: {
+const ALL_NAV_ITEMS: {
   id: AuditorAppView;
   title: string;
   icon: React.ElementType;
+  minAccessLevel: number; // 2 = ANALYTICS, 3 = FULL
 }[] = [
-  { id: "rules", title: "Test Rules", icon: ListFilter },
-  { id: "findings", title: "Findings", icon: FileSearchCorner },
+  { id: "tests",     title: "Tests",     icon: ShieldAlert,       minAccessLevel: 2 },
+  { id: "findings",  title: "Findings",  icon: FileSearchCorner,  minAccessLevel: 2 },
+  { id: "analytics", title: "Analytics", icon: BarChart2,         minAccessLevel: 2 },
+  { id: "payments",  title: "Payments",  icon: CreditCard,        minAccessLevel: 3 },
 ];
 
 type AuditorSidebarProps = {
   walletAddress?: string;
   activeView: AuditorAppView;
+  accessLevel?: number;
   onNavigate: (view: AuditorAppView) => void;
   isLocked?: boolean;
   onBeforeDisconnect?: () => void;
@@ -59,6 +66,7 @@ type AuditorSidebarProps = {
 export function AuditorSidebar({
   walletAddress,
   activeView,
+  accessLevel = 0,
   onNavigate,
   isLocked = false,
   onBeforeDisconnect,
@@ -72,9 +80,7 @@ export function AuditorSidebar({
 
   const { disconnect } = useDisconnect({
     mutation: {
-      onSuccess: () => {
-        // Handle disconnect success
-      },
+      onSuccess: () => {},
     },
   });
 
@@ -83,6 +89,11 @@ export function AuditorSidebar({
     disconnect();
     setLogoutOpen(false);
   };
+
+  // Filter nav items by the connected auditor's access level
+  const visibleNavItems = ALL_NAV_ITEMS.filter(
+    (item) => !isLocked && accessLevel >= item.minAccessLevel
+  );
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -115,43 +126,45 @@ export function AuditorSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger
-                        className={isLocked ? "cursor-not-allowed w-full" : "w-full"}
-                        render={<span />}
+              {isLocked
+                ? ALL_NAV_ITEMS.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-not-allowed w-full" render={<span />}>
+                            <SidebarMenuButton
+                              className="gap-3 py-5 mt-1 rounded w-full opacity-40 pointer-events-none select-none"
+                              aria-disabled={true}
+                            >
+                              <item.icon className="shrink-0" />
+                              <span>{item.title}</span>
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p className="text-xs">Connect to unlock</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </SidebarMenuItem>
+                  ))
+                : visibleNavItems.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        isActive={activeView === item.id}
+                        onClick={() => onNavigate(item.id)}
+                        tooltip={item.title}
+                        className="gap-3 py-5 mt-1 rounded transition-opacity w-full"
                       >
-                        <SidebarMenuButton
-                          isActive={!isLocked && activeView === item.id}
-                          onClick={() => !isLocked && onNavigate(item.id)}
-                          tooltip={isLocked ? undefined : item.title}
-                          className={`gap-3 py-5 mt-1 rounded transition-opacity w-full ${
-                            isLocked
-                              ? "opacity-40 pointer-events-none select-none"
-                              : ""
-                          }`}
-                          aria-disabled={isLocked}
-                        >
-                          <item.icon className="shrink-0" />
-                          <span>{item.title}</span>
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      {isLocked && (
-                        <TooltipContent side="right">
-                          <p className="text-xs">Connect to unlock</p>
-                        </TooltipContent>
-                       )}
-                    </Tooltip>
-                  </TooltipProvider>
-                </SidebarMenuItem>
-              ))}
+                        <item.icon className="shrink-0" />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
 
               {actualWalletAddress && (
                 <SidebarMenuItem className="mt-4">
                   <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
-                    <AlertDialogTrigger 
+                    <AlertDialogTrigger
                       render={
                         <SidebarMenuButton className="gap-3 py-5 rounded transition-all w-full text-destructive hover:text-destructive hover:bg-destructive/10" />
                       }

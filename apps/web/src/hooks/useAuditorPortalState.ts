@@ -21,6 +21,7 @@ export type AuditorPortalState = {
   auditRegistryAddress?: `0x${string}`;
   reviewRegistryAddress?: `0x${string}`;
   accessLevel?: number;
+  deployedAtBlock?: bigint;
 };
 
 export function useAuditorPortalState(businessAddress: `0x${string}`): {
@@ -48,15 +49,16 @@ export function useAuditorPortalState(businessAddress: `0x${string}`): {
   const reg = registry as any;
   const hasRegistry = !!reg && reg.deployedAtBlock > 0n;
 
-  // Read auditor access from AuditRegistry
+  // Read auditor profile — returns (uint8 access, uint248 engagementId) struct tuple.
+  // Index [0] is the access level. Previously "auditorAccess" — renamed to "auditorProfile".
   const {
-    data: auditorAccess,
+    data: auditorProfileData,
     isLoading: accessLoading,
     refetch: refetchAccess,
   } = useReadContract({
     address: reg?.auditRegistry,
-    abi: AuditRegistryAbi,
-    functionName: "auditorAccess",
+    abi: AuditRegistryAbi.abi,
+    functionName: "auditorProfile",
     args: [address ?? "0x0000000000000000000000000000000000000000"],
     chainId: sepolia.id,
     query: {
@@ -77,7 +79,10 @@ export function useAuditorPortalState(businessAddress: `0x${string}`): {
     if (!hasRegistry || !reg!.active) return { phase: "business-not-found" };
     if (accessLoading) return { phase: "loading" };
 
-    const access = auditorAccess as number;
+    // auditorProfile returns a struct tuple — index 0 is the AuditorAccess enum value
+    const profileTuple = auditorProfileData as readonly [number, bigint] | undefined;
+    const access = profileTuple ? Number(profileTuple[0]) : 0;
+
     // access == 0 is AuditorAccess.NONE
     if (access === 0 || access === undefined) return { phase: "unauthorized" };
 
@@ -87,10 +92,11 @@ export function useAuditorPortalState(businessAddress: `0x${string}`): {
       auditRegistryAddress: reg!.auditRegistry,
       reviewRegistryAddress: reg!.reviewTestRegistry,
       accessLevel: access,
+      deployedAtBlock: reg!.deployedAtBlock as bigint,
     };
   }, [
     isConnecting, isReconnecting, isConnected, address, chain,
-    registryLoading, hasRegistry, reg, accessLoading, auditorAccess
+    registryLoading, hasRegistry, reg, accessLoading, auditorProfileData
   ]);
 
   return { state, refetch };

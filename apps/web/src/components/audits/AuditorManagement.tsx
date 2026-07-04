@@ -10,7 +10,7 @@ import {
 } from "wagmi";
 import { sepolia } from "wagmi/chains";
 import { getAddress, isAddress, type Abi } from "viem";
-import { Loader2, Trash2, Info, ExternalLink } from "lucide-react";
+import { Loader2, Trash2, Info, ExternalLink, History } from "lucide-react";
 import { toast } from "sonner";
 
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
@@ -59,6 +59,7 @@ type AuditorRecord = {
 type PendingAction =
   | { type: "grant"; address: `0x${string}` }
   | { type: "revoke"; address: `0x${string}` }
+  | { type: "history"; address: `0x${string}` }
   | null;
 
 interface AuditorManagementProps {
@@ -66,7 +67,7 @@ interface AuditorManagementProps {
 }
 
 const MAX_AUDITORS = 5;
-const auditRegistryAbi = AuditRegistryAbi as Abi;
+const auditRegistryAbi = AuditRegistryAbi.abi as Abi;
 
 function mapAccessStringToEnum(value: string): AuditorAccess {
   switch (value) {
@@ -82,8 +83,11 @@ function mapAccessStringToEnum(value: string): AuditorAccess {
 }
 
 function normalizeAccess(value: unknown): AuditorAccess {
-  const access = Number(value);
-  return access in AuditorAccess ? access : AuditorAccess.NONE;
+  if (Array.isArray(value) && value.length > 0) {
+    const access = Number(value[0]);
+    return access in AuditorAccess ? access : AuditorAccess.NONE;
+  }
+  return AuditorAccess.NONE;
 }
 
 function formatAddress(address: string) {
@@ -98,6 +102,11 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
   const [grantDialogOpen, setGrantDialogOpen] = useState(false);
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [auditorToRevoke, setAuditorToRevoke] = useState<string | null>(null);
+  
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [auditorForHistory, setAuditorForHistory] = useState<string | null>(null);
+  const [historyType, setHistoryType] = useState<"all" | "recent">("all");
+  const [recentCount, setRecentCount] = useState("50");
 
   const hasRegistry = Boolean(auditRegistryAddress);
 
@@ -128,6 +137,20 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     },
   });
 
+  const {
+    data: paymentCountData,
+  } = useReadContract({
+    address: auditRegistryAddress,
+    abi: auditRegistryAbi,
+    functionName: "paymentCount",
+    chainId: sepolia.id,
+    query: {
+      enabled: hasRegistry,
+    },
+  });
+
+  const paymentCount = Number(paymentCountData ?? 0);
+
   const addresses = useMemo(
     () => ((auditorAddresses as `0x${string}`[] | undefined) ?? []),
     [auditorAddresses],
@@ -140,7 +163,7 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     contracts: addresses.map((auditor) => ({
       address: auditRegistryAddress,
       abi: auditRegistryAbi,
-      functionName: "auditorAccess",
+      functionName: "auditorProfile",
       args: [auditor],
       chainId: sepolia.id,
     })),
@@ -193,7 +216,9 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     toast.success(
       pendingAction.type === "grant"
         ? "Auditor access granted"
-        : "Auditor access revoked",
+        : pendingAction.type === "revoke" 
+        ? "Auditor access revoked"
+        : "Historical access granted"
     );
 
     refetchAuditors();
@@ -305,6 +330,56 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     setAuditorToRevoke(null);
   };
 
+  const handleHistoryClick = (address: `0x${string}`) => {
+    if (!auditRegistryAddress) {
+      toast.error("Audit registry address is not available");
+      return;
+    }
+
+    if (!isOwner) {
+      toast.error("Only the registry owner can grant historical access");
+      return;
+    }
+
+    if (paymentCount === 0) {
+      toast.error("No historical payments exist yet");
+      return;
+    }
+    
+    setAuditorForHistory(address);
+    setHistoryDialogOpen(true);
+  };
+
+  const confirmHistoryAccess = () => {
+    if (!auditorForHistory || !auditRegistryAddress) return;
+    
+    let paymentIds: bigint[] = [];
+    
+    if (historyType === "all") {
+      paymentIds = Array.from({ length: paymentCount }, (_, i) => BigInt(i));
+    } else {
+      const count = Math.min(Number(recentCount) || 0, paymentCount);
+      if (count <= 0) {
+        toast.error("Please enter a valid number of recent payments");
+        return;
+      }
+      const startIdx = paymentCount - count;
+      paymentIds = Array.from({ length: count }, (_, i) => BigInt(startIdx + i));
+    }
+    
+    reset();
+    setPendingAction({ type: "history", address: auditorForHistory as `0x${string}` });
+    writeContract({
+      address: auditRegistryAddress,
+      abi: auditRegistryAbi,
+      functionName: "grantHistoricalAccess",
+      args: [auditorForHistory, paymentIds],
+      chainId: sepolia.id,
+    });
+    setHistoryDialogOpen(false);
+    setAuditorForHistory(null);
+  };
+
   const getAccessBadge = (access: AuditorAccess) => {
     switch (access) {
       case AuditorAccess.SIGNAL:
@@ -350,7 +425,6 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
                     <SelectValue placeholder="Select tier..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="signal">Signal</SelectItem>
                     <SelectItem value="analytics">Analytics</SelectItem>
                     <SelectItem value="full">Full Access</SelectItem>
                   </SelectContent>
@@ -406,9 +480,8 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
           <div className="flex items-start gap-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary/70" />
             <div className="space-y-1">
-              <p><strong>Signal:</strong> Receives findings metadata, but cannot view raw payment handles.</p>
-              <p><strong>Analytics:</strong> Can view encrypted GL category rollups and aggregated data.</p>
-              <p><strong>Full Access:</strong> Can read payment handles, analytics, and evidence metadata.</p>
+              <p><strong>Analytics:</strong> Can view encrypted GL category rollups, recipient totals, and audit findings.</p>
+              <p><strong>Full Access:</strong> Can read individual payment handles, run decryptions, and access evidence metadata.</p>
             </div>
           </div>
         </CardFooter>
@@ -458,20 +531,28 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
                     </div>
                     <div className="flex items-center gap-4">
                       {getAccessBadge(auditor.access)}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => handleRevokeClick(auditor.address)}
-                        disabled={!isOwner || isSubmitting}
-                        aria-label={`Revoke ${auditor.address}`}
-                      >
-                        {isRevoking ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
+                      <div className="flex items-center justify-end gap-2">
+                        {auditor.access === AuditorAccess.FULL && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => handleHistoryClick(auditor.address)}
+                          >
+                            <History className="mr-2 h-3.5 w-3.5" />
+                            History
+                          </Button>
                         )}
-                      </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => handleRevokeClick(auditor.address)}
+                        >
+                          <Trash2 className="mr-2 h-3.5 w-3.5" />
+                          Revoke
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -511,6 +592,76 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmRevokeAccess} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Revoke Access
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* History Dialog */}
+      <AlertDialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Grant Historical Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              Grant {auditorForHistory ? formatAddress(auditorForHistory) : ""} access to past payments. 
+              The registry currently has {paymentCount} recorded payments.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="radio" 
+                  id="history-all" 
+                  checked={historyType === "all"} 
+                  onChange={() => setHistoryType("all")} 
+                  className="mt-1"
+                />
+                <Label htmlFor="history-all" className="font-normal cursor-pointer">
+                  All {paymentCount} payments
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="radio" 
+                  id="history-recent" 
+                  checked={historyType === "recent"} 
+                  onChange={() => setHistoryType("recent")} 
+                  className="mt-1"
+                />
+                <Label htmlFor="history-recent" className="font-normal cursor-pointer flex items-center gap-2">
+                  Last 
+                  <Input 
+                    type="number" 
+                    value={recentCount} 
+                    onChange={(e) => setRecentCount(e.target.value)} 
+                    disabled={historyType !== "recent"}
+                    className="w-20 h-8"
+                    min="1"
+                    max={paymentCount.toString()}
+                  /> 
+                  payments
+                </Label>
+              </div>
+            </div>
+            
+            <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground mt-4 flex gap-3">
+              <Info className="h-5 w-5 shrink-0" />
+              <p>
+                Granting access to large numbers of payments at once will consume more gas. 
+                Consider granting access in batches if the transaction fails.
+              </p>
+            </div>
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setHistoryDialogOpen(false);
+              setAuditorForHistory(null);
+            }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmHistoryAccess}>
+              Grant Access
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

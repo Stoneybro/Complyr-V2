@@ -49,7 +49,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
     }
     writeAuth({
       address: auditRegistryAddress,
-      abi: AuditRegistryAbi,
+      abi: AuditRegistryAbi.abi,
       functionName: "setAuthorizedApprover",
       args: [approverAddress as `0x${string}`, authorized],
       chainId: sepolia.id,
@@ -76,7 +76,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
 
       writeTier({
         address: auditRegistryAddress,
-        abi: AuditRegistryAbi,
+        abi: AuditRegistryAbi.abi,
         functionName: "setApproverTier",
         args: [approverAddress as `0x${string}`, encTier, inputProof],
         chainId: sepolia.id,

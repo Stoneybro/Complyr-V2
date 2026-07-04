@@ -85,7 +85,7 @@ export function ThresholdEditor({
 
       writeContract({
         address: auditRegistryAddress,
-        abi: AuditRegistryAbi,
+        abi: AuditRegistryAbi.abi,
         functionName: "setAuthTierThresholds",
         args: [encManager, encDirector, encBoard, inputProof],
         chainId: sepolia.id,
