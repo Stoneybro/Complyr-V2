@@ -36,6 +36,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useReadContract, useChainId, useWalletClient } from "wagmi";
 import { formatUnits } from "viem";
+import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
 import { getFhevmInstance } from "@/lib/fhe";
 import { getDecryptSession, clearDecryptSession } from "@/lib/decrypt-session";
 import { ConfidentialUSDCAddress } from "@/lib/CA";
@@ -112,8 +113,8 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
           )
       );
 
-      // userDecrypt expects the handle as a 0x-prefixed hex string
-      const handleHex = `0x${BigInt(encHandle as bigint).toString(16).padStart(64, "0")}` as `0x${string}`;
+      // userDecrypt expects the handle as a 0x-prefixed bytes32 hex string.
+      const handleHex = fheHandleToHex(encHandle as FheHandle);
 
       const results = await fhevm.userDecrypt(
         [{ handle: handleHex, contractAddress: ConfidentialUSDCAddress }],

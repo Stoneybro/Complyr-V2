@@ -1,172 +1,305 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { usePublicClient, useReadContracts } from "wagmi";
+import React, { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { usePublicClient, useWalletClient, useChainId } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, Lock, Unlock, BarChart3, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { CATEGORY_LABELS } from "@/lib/audit-enums";
+import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
+import { getFhevmInstance } from "@/lib/fhe";
+import { getDecryptSession } from "@/lib/decrypt-session";
 import type { Abi } from "viem";
 
 const auditRegistryAbi = AuditRegistryAbi as Abi;
 const CATEGORY_COUNT = 8;
-
-interface AnalyticsProps {
-  auditRegistryAddress: `0x${string}`;
-  deployedAtBlock: bigint;
-}
-
-type DecryptedRollup = {
-  label: string;
-  value: bigint | null;
-  isDecrypting: boolean;
-};
-
-type RecipientEntry = {
-  address: string;
-  value: bigint | null;
-  isDecrypting: boolean;
-};
-
 const USDC_DECIMALS = 1_000_000n;
 
 function formatUsdc(raw: bigint): string {
   const whole = raw / USDC_DECIMALS;
-  const frac = raw % USDC_DECIMALS;
-  const fracStr = frac.toString().padStart(6, "0").slice(0, 2);
-  return `$${whole.toLocaleString()}.${fracStr}`;
+  const frac = (raw % USDC_DECIMALS).toString().padStart(6, "0").slice(0, 2);
+  return `$${whole.toLocaleString()}.${frac}`;
 }
 
-export function Analytics({ auditRegistryAddress, deployedAtBlock }: AnalyticsProps) {
+function formatAddress(addr: string) {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+interface AnalyticsProps {
+  auditRegistryAddress: `0x${string}`;
+  deployedAtBlock: bigint;
+  walletAddress: `0x${string}`;
+}
+
+type HandleMap = Record<number | string, FheHandle>;
+type ValueMap = Record<number | string, bigint>;
+type PaymentRecordedLog = { args?: { recipient?: unknown } };
+
+export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress }: AnalyticsProps) {
   const publicClient = usePublicClient({ chainId: sepolia.id });
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
 
-  const [categoryRollups, setCategoryRollups] = useState<DecryptedRollup[]>(
-    Array.from({ length: CATEGORY_COUNT }, (_, i) => ({
-      label: CATEGORY_LABELS[i] ?? `Category ${i}`,
-      value: null,
-      isDecrypting: false,
-    }))
-  );
+  const [categoryValues, setCategoryValues] = useState<ValueMap>({});
+  const [recipientValues, setRecipientValues] = useState<ValueMap>({});
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [decryptDone, setDecryptDone] = useState(false);
+  const [decryptError, setDecryptError] = useState<string | null>(null);
 
-  const [recipients, setRecipients] = useState<string[]>([]);
-  const [recipientRollups, setRecipientRollups] = useState<RecipientEntry[]>([]);
-  const [recipientsLoading, setRecipientsLoading] = useState(true);
-  const [categoryLoading, setCategoryLoading] = useState(true);
-  const maxCategoryValue = categoryRollups.reduce(
-    (max, r) => (r.value !== null && r.value > max ? r.value : max),
-    1n
-  );
-
-  // ─── Step 1: Batch-fetch all 8 category totals (encrypted handles) ───────
-  const { data: categoryHandles, isLoading: handlesLoading } = useReadContracts({
-    contracts: Array.from({ length: CATEGORY_COUNT }, (_, i) => ({
-      address: auditRegistryAddress,
-      abi: auditRegistryAbi,
-      functionName: "getCategoryTotal",
-      args: [i],
-      chainId: sepolia.id,
-    })),
+  // ── Category handles: direct eth_call with account= ───────────────────────
+  // getCategoryTotal checks _canReadAnalytics(msg.sender). Multicall3 sets
+  // msg.sender = 0x0 which fails the check. Direct readContract passes
+  // account= in the eth_call so msg.sender = walletAddress inside the contract.
+  const { data: categoryHandles, isLoading: categoryLoading } = useQuery({
+    queryKey: ["analytics-category-handles", auditRegistryAddress, walletAddress],
+    queryFn: async () => {
+      if (!publicClient) return {} as HandleMap;
+      const results = await Promise.all(
+        Array.from({ length: CATEGORY_COUNT }, (_, i) =>
+          publicClient.readContract({
+            address: auditRegistryAddress,
+            abi: auditRegistryAbi,
+            functionName: "getCategoryTotal",
+            args: [i],
+            account: walletAddress,
+          })
+        )
+      );
+      const map: HandleMap = {};
+      results.forEach((r, i) => {
+        if (r !== undefined && r !== null) map[i] = r as bigint;
+      });
+      return map;
+    },
+    enabled: !!publicClient,
+    refetchInterval: 15_000,
   });
 
-  // ─── Step 2: Category handles are encrypted (euint64).
-  // Full client-side decryption requires a signed decrypt session (EIP-712).
-  // This is wired up via the same pattern as useConfidentialBalance.
-  // For now, mark as pending — handles are stored and ready for decryption.
-  useEffect(() => {
-    if (handlesLoading || !categoryHandles) return;
-    setCategoryLoading(false);
-    // Handles are available in categoryHandles — decrypt session wiring is a follow-up task.
-  }, [handlesLoading, categoryHandles]);
+  // ── Recipients: query PaymentRecorded events ──────────────────────────────
+  const { data: recipients = [], isLoading: recipientsLoading } = useQuery({
+    queryKey: ["analytics-recipients", auditRegistryAddress, deployedAtBlock.toString()],
+    queryFn: async () => {
+      if (!publicClient || !deployedAtBlock) return [];
+      const logs = await publicClient.getContractEvents({
+        address: auditRegistryAddress,
+        abi: auditRegistryAbi,
+        eventName: "PaymentRecorded",
+        fromBlock: deployedAtBlock,
+        toBlock: "latest",
+      });
+      return [
+        ...new Set(
+          (logs as readonly PaymentRecordedLog[])
+            .map((log) => log.args?.recipient)
+            .filter((recipient): recipient is string => typeof recipient === "string")
+        ),
+      ];
+    },
+    enabled: !!publicClient && !!deployedAtBlock,
+    staleTime: 30_000,
+  });
 
-  // ─── Step 3: Query PaymentRecorded events to get unique recipients ────
-  useEffect(() => {
-    if (!publicClient || !auditRegistryAddress || !deployedAtBlock) return;
+  // ── Recipient handles: direct eth_call with account= ─────────────────────
+  // getRecipientTotal also checks _canReadAnalytics() — same Multicall3 issue.
+  const { data: recipientHandles, isLoading: recipientHandlesLoading } = useQuery({
+    queryKey: ["analytics-recipient-handles", auditRegistryAddress, walletAddress, recipients.join(",")],
+    queryFn: async () => {
+      if (!publicClient || recipients.length === 0) return {} as HandleMap;
+      const results = await Promise.all(
+        recipients.map((addr) =>
+          publicClient.readContract({
+            address: auditRegistryAddress,
+            abi: auditRegistryAbi,
+            functionName: "getRecipientTotal",
+            args: [addr],
+            account: walletAddress,
+          })
+        )
+      );
+      const map: HandleMap = {};
+      results.forEach((r, i) => {
+        if (r !== undefined && r !== null) map[recipients[i]] = r as bigint;
+      });
+      return map;
+    },
+    enabled: !!publicClient && recipients.length > 0,
+    refetchInterval: 15_000,
+  });
 
-    const fetchRecipients = async () => {
-      setRecipientsLoading(true);
-      try {
-        const logs = await publicClient.getContractEvents({
-          address: auditRegistryAddress,
-          abi: auditRegistryAbi,
-          eventName: "PaymentRecorded",
-          fromBlock: deployedAtBlock,
-          toBlock: "latest",
+  const isLoading = categoryLoading || recipientsLoading || recipientHandlesLoading;
+
+  // ── Decrypt All ───────────────────────────────────────────────────────────
+  const handleDecryptAll = async () => {
+    if (!walletClient || !publicClient) return;
+    if (!categoryHandles && !recipientHandles) return;
+
+    setIsDecrypting(true);
+    setDecryptError(null);
+    try {
+      const fhevm = await getFhevmInstance();
+      const session = await getDecryptSession(
+        chainId,
+        walletAddress,
+        auditRegistryAddress,
+        (typedData) =>
+          walletClient.signTypedData(
+            typedData as Parameters<typeof walletClient.signTypedData>[0]
+          )
+      );
+
+      // Collect all handles (categories + recipients) into one batch
+      const handlePairs: { handle: `0x${string}`; contractAddress: `0x${string}` }[] = [];
+      const catKeys: { key: number; hex: `0x${string}` }[] = [];
+      const recKeys: { key: string; hex: `0x${string}` }[] = [];
+
+      // Category handles
+      if (categoryHandles) {
+        Object.entries(categoryHandles).forEach(([idx, handle]) => {
+          const hex = fheHandleToHex(handle);
+          catKeys.push({ key: Number(idx), hex });
+          handlePairs.push({ handle: hex, contractAddress: auditRegistryAddress });
         });
-
-        const unique = [
-          ...new Set(
-            logs
-              .map((log) => (log.args as any)?.recipient as string | undefined)
-              .filter(Boolean) as string[]
-          ),
-        ];
-        setRecipients(unique);
-      } catch (err) {
-        console.error("Failed to fetch PaymentRecorded events:", err);
-      } finally {
-        setRecipientsLoading(false);
       }
-    };
 
-    fetchRecipients();
-  }, [publicClient, auditRegistryAddress, deployedAtBlock]);
+      // Recipient handles
+      if (recipientHandles) {
+        Object.entries(recipientHandles).forEach(([addr, handle]) => {
+          const hex = fheHandleToHex(handle);
+          recKeys.push({ key: addr, hex });
+          handlePairs.push({ handle: hex, contractAddress: auditRegistryAddress });
+        });
+      }
 
-  // ─── Step 4: Batch-fetch recipient totals then decrypt ────────────────
-  const { data: recipientHandles, isLoading: recipientHandlesLoading } = useReadContracts({
-    contracts: recipients.map((addr) => ({
-      address: auditRegistryAddress,
-      abi: auditRegistryAbi,
-      functionName: "getRecipientTotal",
-      args: [addr],
-      chainId: sepolia.id,
-    })),
-    query: { enabled: recipients.length > 0 },
-  });
+      if (handlePairs.length === 0) {
+        setIsDecrypting(false);
+        return;
+      }
 
-  useEffect(() => {
-    if (recipientHandlesLoading || !recipientHandles || recipients.length === 0) return;
-    // Recipient handles are available — decrypt session wiring is a follow-up task.
-    const entries: RecipientEntry[] = recipients.map((addr) => ({
-      address: addr,
-      value: null,
-      isDecrypting: false,
+      const results = await fhevm.userDecrypt(
+        handlePairs,
+        session.privateKey,
+        session.publicKey,
+        session.signature,
+        [auditRegistryAddress],
+        walletAddress,
+        session.startTimestamp,
+        session.durationDays
+      );
+
+      // Map results back by hex handle
+      const newCatValues: ValueMap = {};
+      catKeys.forEach(({ key, hex }) => {
+        const v = results[hex];
+        if (v !== undefined && v !== null) newCatValues[key] = BigInt(v as bigint | string);
+      });
+      setCategoryValues(newCatValues);
+
+      const newRecValues: ValueMap = {};
+      recKeys.forEach(({ key, hex }) => {
+        const v = results[hex];
+        if (v !== undefined && v !== null) newRecValues[key] = BigInt(v as bigint | string);
+      });
+      setRecipientValues(newRecValues);
+
+      setDecryptDone(true);
+    } catch (err: unknown) {
+      console.error("Analytics decryption failed:", err);
+      setDecryptError(err instanceof Error ? err.message : "Decryption failed");
+    } finally {
+      setIsDecrypting(false);
+    }
+  };
+
+  // ── Derived display values ────────────────────────────────────────────────
+  const categoryRows = useMemo(() => {
+    return Array.from({ length: CATEGORY_COUNT }, (_, i) => ({
+      index: i,
+      label: CATEGORY_LABELS[i] ?? `Category ${i}`,
+      value: categoryValues[i] ?? null,
+      hasHandle: categoryHandles != null && categoryHandles[i] != null,
     }));
-    setRecipientRollups(entries);
-  }, [recipientHandlesLoading, recipientHandles, recipients]);
+  }, [categoryHandles, categoryValues]);
 
-  const sortedRecipients = [...recipientRollups].sort((a, b) =>
-    (b.value ?? 0n) > (a.value ?? 0n) ? 1 : -1
-  );
-  const maxRecipientValue = sortedRecipients.reduce(
-    (max, r) => (r.value !== null && r.value > max ? r.value : max),
-    1n
+  const maxCategoryValue = useMemo(
+    () => categoryRows.reduce((max, r) => (r.value !== null && r.value > max ? r.value : max), 1n),
+    [categoryRows]
   );
 
+  const recipientRows = useMemo(() => {
+    return recipients.map((addr) => ({
+      address: addr,
+      value: recipientValues[addr] ?? null,
+      hasHandle: recipientHandles != null && recipientHandles[addr] != null,
+    })).sort((a, b) => (b.value ?? 0n) > (a.value ?? 0n) ? 1 : -1);
+  }, [recipients, recipientValues, recipientHandles]);
+
+  const maxRecipientValue = useMemo(
+    () => recipientRows.reduce((max, r) => (r.value !== null && r.value > max ? r.value : max), 1n),
+    [recipientRows]
+  );
+
+  const handlesReady =
+    (categoryHandles && Object.keys(categoryHandles).length > 0) ||
+    (recipientHandles && Object.keys(recipientHandles).length > 0);
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-5xl mx-auto w-full pb-12 space-y-10">
-      <div className="flex flex-col gap-1 border-b border-border pb-6">
-        <h2 className="text-2xl font-semibold tracking-tight">Analytics</h2>
-        <p className="text-sm text-muted-foreground">
-          Encrypted rollup totals decrypted client-side. Values update as new payments are recorded.
-        </p>
+      {/* Header */}
+      <div className="flex items-start justify-between border-b border-border pb-6">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl font-semibold tracking-tight">Analytics</h2>
+          <p className="text-sm text-muted-foreground">
+            Encrypted rollup totals across GL categories and recipients. Decrypt to reveal values.
+          </p>
+        </div>
+        <Button
+          onClick={handleDecryptAll}
+          disabled={isDecrypting || isLoading || !handlesReady || !walletClient}
+          className="gap-2 shrink-0"
+          variant={decryptDone ? "outline" : "default"}
+        >
+          {isDecrypting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : decryptDone ? (
+            <Unlock className="h-4 w-4" />
+          ) : (
+            <Lock className="h-4 w-4" />
+          )}
+          {isDecrypting ? "Decrypting…" : decryptDone ? "Decrypted" : "Decrypt All"}
+        </Button>
       </div>
 
+      {decryptError && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-600">
+          {decryptError}
+        </div>
+      )}
+
       {/* Category Rollups */}
-      <section>
-        <h3 className="text-base font-semibold mb-4">GL Category Totals</h3>
-        {handlesLoading ? (
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-base font-semibold">GL Category Totals</h3>
+        </div>
+
+        {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm py-8">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading encrypted handles…
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         ) : (
           <div className="space-y-3">
-            {categoryRollups.map((cat, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <span className="w-36 text-sm text-muted-foreground shrink-0">{cat.label}</span>
-                <div className="flex-1 h-7 bg-muted/30 rounded-lg overflow-hidden relative">
+            {categoryRows.map((cat) => (
+              <div key={cat.index} className="flex items-center gap-3">
+                <span className="w-40 text-sm text-muted-foreground shrink-0 truncate">
+                  {cat.label}
+                </span>
+                <div className="flex-1 h-8 bg-muted/30 rounded-lg overflow-hidden relative">
                   {cat.value !== null ? (
                     <div
-                      className="h-full bg-primary/70 rounded-lg transition-all duration-700 ease-out"
+                      className="h-full bg-primary/60 rounded-lg transition-all duration-700 ease-out"
                       style={{
                         width: maxCategoryValue > 0n
                           ? `${Number((cat.value * 100n) / maxCategoryValue)}%`
@@ -174,20 +307,19 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock }: AnalyticsPr
                       }}
                     />
                   ) : (
-                    <div className="h-full flex items-center px-3">
-                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                    </div>
+                    // Indeterminate pattern while encrypted
+                    <div className="h-full bg-muted/50 rounded-lg" />
                   )}
                 </div>
-                <span className="w-28 text-sm font-mono text-right shrink-0">
-                  {cat.isDecrypting ? (
-                    <Loader2 className="h-3 w-3 animate-spin inline" />
-                  ) : cat.value !== null ? (
-                    formatUsdc(cat.value)
-                  ) : (
-                    <span className="text-muted-foreground flex items-center gap-1 justify-end">
+                <span className="w-32 text-sm font-mono text-right shrink-0">
+                  {cat.value !== null ? (
+                    <span className="text-emerald-600">{formatUsdc(cat.value)}</span>
+                  ) : cat.hasHandle ? (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
                       <Lock className="h-3 w-3" /> Encrypted
                     </span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">No data</span>
                   )}
                 </span>
               </div>
@@ -196,10 +328,17 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock }: AnalyticsPr
         )}
       </section>
 
-      {/* Recipient Rollups */}
-      <section>
-        <h3 className="text-base font-semibold mb-4">Recipient Concentration</h3>
-        {recipientsLoading ? (
+      {/* Recipient Concentration */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-base font-semibold">Recipient Concentration</h3>
+          <span className="text-xs text-muted-foreground">
+            — cumulative spend per recipient
+          </span>
+        </div>
+
+        {recipientsLoading || recipientHandlesLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm py-8">
             <Loader2 className="h-4 w-4 animate-spin" /> Querying payment events…
           </div>
@@ -207,15 +346,18 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock }: AnalyticsPr
           <p className="text-sm text-muted-foreground py-4">No payments recorded yet.</p>
         ) : (
           <div className="space-y-3">
-            {sortedRecipients.map((r, i) => (
-              <div key={r.address} className="flex items-center gap-4">
-                <span className="w-36 font-mono text-xs text-muted-foreground shrink-0 truncate" title={r.address}>
-                  {r.address.slice(0, 6)}…{r.address.slice(-4)}
+            {recipientRows.map((r) => (
+              <div key={r.address} className="flex items-center gap-3">
+                <span
+                  className="w-40 font-mono text-xs text-muted-foreground shrink-0 truncate"
+                  title={r.address}
+                >
+                  {formatAddress(r.address)}
                 </span>
-                <div className="flex-1 h-7 bg-muted/30 rounded-lg overflow-hidden">
+                <div className="flex-1 h-8 bg-muted/30 rounded-lg overflow-hidden">
                   {r.value !== null ? (
                     <div
-                      className="h-full bg-emerald-500/60 rounded-lg transition-all duration-700 ease-out"
+                      className="h-full bg-emerald-500/50 rounded-lg transition-all duration-700 ease-out"
                       style={{
                         width: maxRecipientValue > 0n
                           ? `${Number((r.value * 100n) / maxRecipientValue)}%`
@@ -223,18 +365,18 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock }: AnalyticsPr
                       }}
                     />
                   ) : (
-                    <div className="h-full flex items-center px-3">
-                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                    </div>
+                    <div className="h-full bg-muted/50 rounded-lg" />
                   )}
                 </div>
-                <span className="w-28 text-sm font-mono text-right shrink-0">
-                  {r.isDecrypting ? (
-                    <Loader2 className="h-3 w-3 animate-spin inline" />
-                  ) : r.value !== null ? (
-                    formatUsdc(r.value)
+                <span className="w-32 text-sm font-mono text-right shrink-0">
+                  {r.value !== null ? (
+                    <span className="text-emerald-600">{formatUsdc(r.value)}</span>
+                  ) : r.hasHandle ? (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
+                      <Lock className="h-3 w-3" /> Encrypted
+                    </span>
                   ) : (
-                    "—"
+                    <span className="text-muted-foreground text-xs">—</span>
                   )}
                 </span>
               </div>

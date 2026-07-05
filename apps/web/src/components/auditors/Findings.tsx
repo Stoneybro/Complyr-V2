@@ -1,15 +1,18 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
-import { useReadContracts, usePublicClient } from "wagmi";
+import React, { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useReadContracts, usePublicClient, useWalletClient, useChainId } from "wagmi";
+import { formatUnits } from "viem";
 import { sepolia } from "wagmi/chains";
-import { Loader2 } from "lucide-react";
+import { Loader2, FileSearchCorner, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FileSearchCorner } from "lucide-react";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
+import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
 import { getFhevmInstance } from "@/lib/fhe";
+import { getDecryptSession } from "@/lib/decrypt-session";
 import type { Abi } from "viem";
 
 const auditRegistryAbi = AuditRegistryAbi as Abi;
@@ -43,11 +46,15 @@ type FindingSignal = {
   severity: number;
   triggeredAtBlock: number;
   paymentId: number;
-  triggeredBy: string;
   isShared: boolean;
 };
 
-type DecryptState = "idle" | "decrypting" | "done" | "error" | "no-access";
+type DecryptState = "idle" | "decrypting" | "done" | "error";
+
+type DecryptedFinding = {
+  /** Formatted USDC amount that triggered the test, e.g. "12,345.00 USDC" */
+  flaggedAmount: string;
+};
 
 function formatAddress(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -57,16 +64,15 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
   const [filterTest, setFilterTest] = useState<number | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
   const [decryptStates, setDecryptStates] = useState<Record<number, DecryptState>>({});
-  const [decryptedValues, setDecryptedValues] = useState<Record<number, string>>({});
-
-  // Step 3 state — populated via direct eth_call (not multicall) so msg.sender = walletAddress
-  const [signalResults, setSignalResults] = useState<FindingSignal[]>([]);
-  const [signalLoading, setSignalLoading] = useState(false);
+  const [decryptedFindings, setDecryptedFindings] = useState<Record<number, DecryptedFinding>>({});
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   const publicClient = usePublicClient({ chainId: sepolia.id });
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
 
-  // Step 1: get per-auditor finding count
-  const { data: countData, isLoading: countLoading, refetch: refetchCount } = useReadContracts({
+  // ── Step 1: per-auditor finding count ────────────────────────────────────
+  const { data: countData, isLoading: countLoading } = useReadContracts({
     contracts: [
       {
         address: auditRegistryAddress,
@@ -81,7 +87,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
 
   const findingCount = Number(countData?.[0]?.result ?? 0);
 
-  // Step 2: fetch all finding index references
+  // ── Step 2: fetch finding ID references ──────────────────────────────────
   const { data: indexData, isLoading: indexLoading } = useReadContracts({
     contracts: Array.from({ length: findingCount }, (_, i) => ({
       address: auditRegistryAddress,
@@ -98,17 +104,14 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
     [indexData]
   );
 
-  // Step 3: fetch signal data via direct eth_call (bypasses Multicall3 so msg.sender = walletAddress).
-  // useReadContracts batches through Multicall3 — inside multicall, msg.sender becomes the
-  // multicall contract address (NONE access), causing getFindingSignal to revert Unauthorized().
-  // publicClient.readContract sends a raw eth_call with account= so msg.sender is the auditor wallet.
-  const fetchSignals = useCallback(async () => {
-    if (!publicClient || findingIds.length === 0) {
-      setSignalResults([]);
-      return;
-    }
-    setSignalLoading(true);
-    try {
+  // ── Step 3: fetch signal data via direct eth_call (bypasses Multicall3) ──
+  // getFindingSignal checks msg.sender — Multicall3 sets it to 0x0 which
+  // fails the access control. publicClient.readContract with account= sets
+  // the correct from= in the eth_call.
+  const { data: signalResultsRaw, isLoading: signalLoading } = useQuery({
+    queryKey: ["findings-signals", auditRegistryAddress, walletAddress, findingIds.join(",")],
+    queryFn: async () => {
+      if (!publicClient || findingIds.length === 0) return [];
       const results = await Promise.all(
         findingIds.map((id) =>
           publicClient.readContract({
@@ -116,7 +119,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
             abi: auditRegistryAbi,
             functionName: "getFindingSignal",
             args: [BigInt(id)],
-            account: walletAddress, // sets from= in eth_call → msg.sender inside contract
+            account: walletAddress,
           })
         )
       );
@@ -131,29 +134,23 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
             severity:         Number(tuple[1]),
             triggeredAtBlock: Number(tuple[2]),
             paymentId:        Number(tuple[3]),
-            triggeredBy:      tuple[4] as string,
+            // tuple[4] = triggeredBy — omitted from UI (one auditor per engagement)
             isShared:         tuple[5] as boolean,
           };
         })
         .filter(Boolean) as FindingSignal[];
 
       parsed.sort((a, b) => b.triggeredAtBlock - a.triggeredAtBlock);
-      setSignalResults(parsed);
-    } catch (err) {
-      console.error("getFindingSignal failed:", err);
-      setSignalResults([]);
-    } finally {
-      setSignalLoading(false);
-    }
-  }, [publicClient, findingIds, auditRegistryAddress, walletAddress]);
+      return parsed;
+    },
+    enabled: findingIds.length > 0 && !!publicClient,
+    // Background refetch — does NOT show a full-page spinner on subsequent fetches
+    refetchInterval: 10_000,
+  });
 
-  useEffect(() => {
-    fetchSignals();
-    const interval = setInterval(fetchSignals, 10_000);
-    return () => clearInterval(interval);
-  }, [fetchSignals]);
+  const signalResults = signalResultsRaw ?? [];
 
-  // Step 4 (FULL only): check payment access for decrypt eligibility
+  // ── Step 4 (FULL only): per-payment access gate ───────────────────────────
   const { data: accessCheckData } = useReadContracts({
     contracts: signalResults.map((f) => ({
       address: auditRegistryAddress,
@@ -162,7 +159,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
       args: [walletAddress, BigInt(f.paymentId)],
       chainId: sepolia.id,
     })),
-    query: { enabled: accessLevel >= 3 && signalResults.length > 0 },
+    query: { enabled: accessLevel === 3 && signalResults.length > 0 },
   });
 
   const paymentAccessMap = useMemo(() => {
@@ -181,20 +178,91 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
     });
   }, [signalResults, filterTest, filterSeverity]);
 
+  // Only full initial load shows spinner; background refetches are silent
   const isLoading = countLoading || indexLoading || signalLoading;
 
+  // ── Decrypt: FULL auditors only ───────────────────────────────────────────
+  // getFinding() calls _canReadPayment() which denies ANALYTICS access.
   const handleDecrypt = async (findingId: number) => {
+    if (!walletClient || !publicClient) return;
     setDecryptStates((s) => ({ ...s, [findingId]: "decrypting" }));
     try {
-      await getFhevmInstance();
-      setDecryptedValues((v) => ({ ...v, [findingId]: "Decrypted (placeholder)" }));
+      // 1. Fetch the full finding (includes encrypted flaggedHandle)
+      //    Must use account= to pass msg.sender check in getFinding()
+      const findingData = await publicClient.readContract({
+        address: auditRegistryAddress,
+        abi: auditRegistryAbi,
+        functionName: "getFinding",
+        args: [BigInt(findingId)],
+        account: walletAddress,
+      });
+
+      const tuple = findingData as readonly [bigint, number, number, FheHandle, number, string, boolean, string, boolean];
+      const flaggedHandle = tuple[3]; // euint64 handle — raw bytes32 bigint
+
+      // 2. Establish FHE decrypt session (EIP-712 prompt, once per session)
+      const fhevm = await getFhevmInstance();
+      const session = await getDecryptSession(
+        chainId,
+        walletAddress,
+        auditRegistryAddress,
+        (typedData) =>
+          walletClient.signTypedData(
+            typedData as Parameters<typeof walletClient.signTypedData>[0]
+          )
+      );
+
+      // 3. Encode handle as bytes32 hex — toHex preserves the full 32-byte
+      //    FHEVM handle layout. padStart on a raw bigint can corrupt it.
+      const handleHex = fheHandleToHex(flaggedHandle);
+
+      const results = await fhevm.userDecrypt(
+        [{ handle: handleHex, contractAddress: auditRegistryAddress }],
+        session.privateKey,
+        session.publicKey,
+        session.signature,
+        [auditRegistryAddress],
+        walletAddress,
+        session.startTimestamp,
+        session.durationDays
+      );
+
+      const value = results[handleHex];
+      if (value === undefined || value === null) {
+        throw new Error("Decryption returned no value for handle");
+      }
+
+      const formatted = Number(formatUnits(BigInt(value as bigint | string), 6)).toLocaleString(
+        undefined,
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+      );
+
+      setDecryptedFindings((v) => ({
+        ...v,
+        [findingId]: { flaggedAmount: `${formatted} USDC` },
+      }));
       setDecryptStates((s) => ({ ...s, [findingId]: "done" }));
-    } catch {
+      // Auto-expand the row to show decrypted details
+      setExpandedRows((prev) => new Set(prev).add(findingId));
+    } catch (err) {
+      console.error("Finding decryption failed:", err);
       setDecryptStates((s) => ({ ...s, [findingId]: "error" }));
     }
   };
 
+  const toggleExpand = (findingId: number) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(findingId)) {
+        next.delete(findingId);
+      } else {
+        next.add(findingId);
+      }
+      return next;
+    });
+  };
 
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -228,6 +296,11 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
         <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
         <p className="text-sm text-muted-foreground">
           {signalResults.length} finding{signalResults.length !== 1 ? "s" : ""} in your engagement.
+          {accessLevel === 3 && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              Full access — decrypt flagged values on demand.
+            </span>
+          )}
         </p>
       </div>
 
@@ -264,60 +337,150 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
               <th className="text-left px-4 py-3 font-medium">Payment ID</th>
               <th className="text-left px-4 py-3 font-medium">Test Type</th>
               <th className="text-left px-4 py-3 font-medium">Severity</th>
-              <th className="text-left px-4 py-3 font-medium">Triggered By</th>
               <th className="text-left px-4 py-3 font-medium">Block</th>
-              {accessLevel >= 3 && <th className="text-right px-4 py-3 font-medium">Decrypt</th>}
+              <th className="text-left px-4 py-3 font-medium">Flagged Value</th>
+              {accessLevel === 3 && (
+                <th className="text-right px-4 py-3 font-medium">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.map((f) => {
               const severity = SEVERITY_CONFIG[f.severity] ?? SEVERITY_CONFIG[0];
-              const hasAccess = paymentAccessMap[f.findingId];
+              const hasAccess = paymentAccessMap[f.findingId] ?? false;
               const decryptState = decryptStates[f.findingId] ?? "idle";
+              const decrypted = decryptedFindings[f.findingId];
+              const isExpanded = expandedRows.has(f.findingId);
 
               return (
-                <tr key={f.findingId} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs">#{f.paymentId}</td>
-                  <td className="px-4 py-3">
-                    {f.isShared && (
-                      <span className="inline-flex items-center gap-1 mr-2 text-xs text-muted-foreground">[shared]</span>
-                    )}
-                    {TEST_TYPE_LABELS[f.testType] ?? `Test ${f.testType}`}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge className={severity.className}>{severity.label}</Badge>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {formatAddress(f.triggeredBy)}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {f.triggeredAtBlock}
-                  </td>
-                  {accessLevel >= 3 && (
-                    <td className="px-4 py-3 text-right">
-                      {decryptState === "done" ? (
-                        <span className="text-xs font-mono text-emerald-600">{decryptedValues[f.findingId]}</span>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          disabled={!hasAccess || decryptState === "decrypting"}
-                          onClick={() => handleDecrypt(f.findingId)}
-                          title={!hasAccess ? "Historical access not granted for this payment" : undefined}
-                        >
-                          {decryptState === "decrypting" ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : !hasAccess ? (
-                            "No Access"
-                          ) : (
-                            "Decrypt"
-                          )}
-                        </Button>
+                <React.Fragment key={f.findingId}>
+                  <tr className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs">
+                      #{f.paymentId}
+                      {f.isShared && (
+                        <span className="ml-2 text-[10px] text-muted-foreground border border-border rounded px-1">
+                          shared
+                        </span>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      {TEST_TYPE_LABELS[f.testType] ?? `Test ${f.testType}`}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge className={severity.className}>{severity.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {f.triggeredAtBlock}
+                    </td>
+                    <td className="px-4 py-3">
+                      {decryptState === "done" && decrypted ? (
+                        <span className="font-mono text-xs text-emerald-600">
+                          {decrypted.flaggedAmount}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Lock className="h-3 w-3" />
+                          Encrypted
+                        </span>
+                      )}
+                    </td>
+                    {accessLevel === 3 && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {decryptState === "done" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs px-2"
+                              onClick={() => toggleExpand(f.findingId)}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="h-3 w-3" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3" />
+                              )}
+                              {isExpanded ? "Collapse" : "Details"}
+                            </Button>
+                          )}
+                          {decryptState !== "done" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={!hasAccess || decryptState === "decrypting"}
+                              onClick={() => handleDecrypt(f.findingId)}
+                              title={
+                                !hasAccess
+                                  ? "Historical access not granted for this payment"
+                                  : decryptState === "error"
+                                  ? "Decryption failed — try again"
+                                  : undefined
+                              }
+                            >
+                              {decryptState === "decrypting" ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : !hasAccess ? (
+                                "No Access"
+                              ) : decryptState === "error" ? (
+                                "Retry"
+                              ) : (
+                                "Decrypt"
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+
+                  {/* Inline expanded detail panel — shown after decrypt */}
+                  {isExpanded && decrypted && (
+                    <tr className="bg-muted/10">
+                      <td
+                        colSpan={accessLevel === 3 ? 6 : 5}
+                        className="px-6 py-4"
+                      >
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
+                              Test
+                            </p>
+                            <p className="font-medium">
+                              {TEST_TYPE_LABELS[f.testType] ?? `Test ${f.testType}`}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
+                              Flagged Amount
+                            </p>
+                            <p className="font-mono text-emerald-600 font-medium">
+                              {decrypted.flaggedAmount}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
+                              Severity
+                            </p>
+                            <Badge className={severity.className}>{severity.label}</Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
+                              Payment ID
+                            </p>
+                            <p className="font-mono">#{f.paymentId}</p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-[11px] text-muted-foreground">
+                          This value exceeded the threshold you configured for the{" "}
+                          <span className="font-medium text-foreground">
+                            {TEST_TYPE_LABELS[f.testType]}
+                          </span>{" "}
+                          test. Navigate to the Payments tab to view full payment details.
+                        </p>
+                      </td>
+                    </tr>
                   )}
-                </tr>
+                </React.Fragment>
               );
             })}
           </tbody>

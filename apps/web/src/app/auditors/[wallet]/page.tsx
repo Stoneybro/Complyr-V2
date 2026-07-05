@@ -88,6 +88,7 @@ export default function AuditorPortalPage() {
                       <Analytics
                         auditRegistryAddress={auditRegistryAddress}
                         deployedAtBlock={deployedAtBlock}
+                        walletAddress={walletAddress}
                       />
                     )}
 

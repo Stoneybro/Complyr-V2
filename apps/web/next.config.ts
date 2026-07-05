@@ -12,6 +12,18 @@ const nextConfig: NextConfig = {
   // Next.js we're aware and have no custom rules needed — Turbopack handles
   // WASM (.wasm) imports natively without additional configuration.
   turbopack: {},
+
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
