@@ -1,583 +1,741 @@
-[
-  {
-    "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
-  },
-  {
-    "inputs": [],
-    "name": "ActiveAuditorLimitReached",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "AlreadyInitialized",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidAddress",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidFrequency",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidPriority",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidScope",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidTestType",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "NotOwner",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ResultNotAvailable",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "handle",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "sender",
-        "type": "address"
-      }
-    ],
-    "name": "SenderNotAllowedToUseHandle",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "TestNotConfigured",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "Unauthorized",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ZamaProtocolUnsupported",
-    "type": "error"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      }
-    ],
-    "name": "FindingRequested",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "newLimit",
-        "type": "uint256"
-      }
-    ],
-    "name": "MaxActiveAuditorsSet",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnerTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "scope",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum ReviewTestRegistry.Priority",
-        "name": "priority",
-        "type": "uint8"
-      }
-    ],
-    "name": "TestCreated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      }
-    ],
-    "name": "TestDisabled",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "ebool",
-        "name": "result",
-        "type": "bytes32"
-      }
-    ],
-    "name": "TestEvaluated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "auditorCount",
-        "type": "uint256"
-      }
-    ],
-    "name": "TestsEvaluated",
-    "type": "event"
-  },
-  {
-    "inputs": [],
-    "name": "activeAuditorCount",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "activeAuditors",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "auditRegistry",
-    "outputs": [
-      {
-        "internalType": "contract IAuditRegistry",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      }
-    ],
-    "name": "auditorActive",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "confidentialProtocolId",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      }
-    ],
-    "name": "createSodFinding",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "scope",
-        "type": "uint8"
-      },
-      {
-        "internalType": "externalEuint64",
-        "name": "encThreshold",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
-      },
-      {
-        "internalType": "enum ReviewTestRegistry.Priority",
-        "name": "priority",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint16",
-        "name": "monitoringFrequency",
-        "type": "uint16"
-      }
-    ],
-    "name": "createTest",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      }
-    ],
-    "name": "disableTest",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      }
-    ],
-    "name": "evaluateAll",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      },
-      {
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      }
-    ],
-    "name": "getTest",
-    "outputs": [
-      {
-        "internalType": "enum ReviewTestRegistry.Priority",
-        "name": "priority",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "scope",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint16",
-        "name": "monitoringFrequency",
-        "type": "uint16"
-      },
-      {
-        "internalType": "bool",
-        "name": "exists",
-        "type": "bool"
-      },
-      {
-        "internalType": "euint64",
-        "name": "threshold",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "auditor",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      }
-    ],
-    "name": "getTestResult",
-    "outputs": [
-      {
-        "internalType": "ebool",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "auditRegistry_",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "initialOwner",
-        "type": "address"
-      }
-    ],
-    "name": "initialize",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "maxActiveAuditors",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      },
-      {
-        "internalType": "bool",
-        "name": "triggered",
-        "type": "bool"
-      }
-    ],
-    "name": "recordFindingIfTriggered",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "paymentId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "testType",
-        "type": "uint8"
-      }
-    ],
-    "name": "requestFindingCreation",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "newLimit",
-        "type": "uint256"
-      }
-    ],
-    "name": "setMaxActiveAuditors",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "transferOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
+﻿[
+    {
+        "inputs":  [
+
+                   ],
+        "stateMutability":  "nonpayable",
+        "type":  "constructor"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "ActiveAuditorLimitReached",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "AlreadyInitialized",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "InvalidAddress",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "InvalidFrequency",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "InvalidPriority",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "InvalidScope",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "InvalidTestType",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "NotOwner",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "ResultNotAvailable",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "bytes32",
+                           "name":  "handle",
+                           "type":  "bytes32"
+                       },
+                       {
+                           "internalType":  "address",
+                           "name":  "sender",
+                           "type":  "address"
+                       }
+                   ],
+        "name":  "SenderNotAllowedToUseHandle",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "TestNotConfigured",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "Unauthorized",
+        "type":  "error"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "ZamaProtocolUnsupported",
+        "type":  "error"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "FindingRequested",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  false,
+                           "internalType":  "uint256",
+                           "name":  "newLimit",
+                           "type":  "uint256"
+                       }
+                   ],
+        "name":  "MaxActiveAuditorsSet",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "previousOwner",
+                           "type":  "address"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "newOwner",
+                           "type":  "address"
+                       }
+                   ],
+        "name":  "OwnerTransferred",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "RelayFindingSubmitted",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       },
+                       {
+                           "indexed":  false,
+                           "internalType":  "uint8",
+                           "name":  "scope",
+                           "type":  "uint8"
+                       },
+                       {
+                           "indexed":  false,
+                           "internalType":  "enum ReviewTestRegistry.Priority",
+                           "name":  "priority",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "TestCreated",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "TestDisabled",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       },
+                       {
+                           "indexed":  false,
+                           "internalType":  "ebool",
+                           "name":  "result",
+                           "type":  "bytes32"
+                       }
+                   ],
+        "name":  "TestEvaluated",
+        "type":  "event"
+    },
+    {
+        "anonymous":  false,
+        "inputs":  [
+                       {
+                           "indexed":  true,
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "indexed":  false,
+                           "internalType":  "uint256",
+                           "name":  "auditorCount",
+                           "type":  "uint256"
+                       }
+                   ],
+        "name":  "TestsEvaluated",
+        "type":  "event"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "activeAuditorCount",
+        "outputs":  [
+                        {
+                            "internalType":  "uint256",
+                            "name":  "",
+                            "type":  "uint256"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "",
+                           "type":  "uint256"
+                       }
+                   ],
+        "name":  "activeAuditors",
+        "outputs":  [
+                        {
+                            "internalType":  "address",
+                            "name":  "",
+                            "type":  "address"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "auditRegistry",
+        "outputs":  [
+                        {
+                            "internalType":  "contract IAuditRegistry",
+                            "name":  "",
+                            "type":  "address"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       }
+                   ],
+        "name":  "auditorActive",
+        "outputs":  [
+                        {
+                            "internalType":  "bool",
+                            "name":  "active",
+                            "type":  "bool"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "confidentialProtocolId",
+        "outputs":  [
+                        {
+                            "internalType":  "uint256",
+                            "name":  "",
+                            "type":  "uint256"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       }
+                   ],
+        "name":  "createSodFinding",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       },
+                       {
+                           "internalType":  "uint8",
+                           "name":  "scope",
+                           "type":  "uint8"
+                       },
+                       {
+                           "internalType":  "externalEuint64",
+                           "name":  "encThreshold",
+                           "type":  "bytes32"
+                       },
+                       {
+                           "internalType":  "bytes",
+                           "name":  "inputProof",
+                           "type":  "bytes"
+                       },
+                       {
+                           "internalType":  "enum ReviewTestRegistry.Priority",
+                           "name":  "priority",
+                           "type":  "uint8"
+                       },
+                       {
+                           "internalType":  "uint16",
+                           "name":  "monitoringFrequency",
+                           "type":  "uint16"
+                       }
+                   ],
+        "name":  "createTest",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "disableTest",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       }
+                   ],
+        "name":  "evaluateAll",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       }
+                   ],
+        "name":  "getAuthBreachResult",
+        "outputs":  [
+                        {
+                            "internalType":  "ebool",
+                            "name":  "",
+                            "type":  "bytes32"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "getTest",
+        "outputs":  [
+                        {
+                            "internalType":  "enum ReviewTestRegistry.Priority",
+                            "name":  "priority",
+                            "type":  "uint8"
+                        },
+                        {
+                            "internalType":  "uint8",
+                            "name":  "scope",
+                            "type":  "uint8"
+                        },
+                        {
+                            "internalType":  "uint16",
+                            "name":  "monitoringFrequency",
+                            "type":  "uint16"
+                        },
+                        {
+                            "internalType":  "bool",
+                            "name":  "exists",
+                            "type":  "bool"
+                        },
+                        {
+                            "internalType":  "euint64",
+                            "name":  "threshold",
+                            "type":  "bytes32"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "getTestResult",
+        "outputs":  [
+                        {
+                            "internalType":  "ebool",
+                            "name":  "",
+                            "type":  "bytes32"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "auditRegistry_",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "address",
+                           "name":  "initialOwner",
+                           "type":  "address"
+                       }
+                   ],
+        "name":  "initialize",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "maxActiveAuditors",
+        "outputs":  [
+                        {
+                            "internalType":  "uint256",
+                            "name":  "",
+                            "type":  "uint256"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+
+                   ],
+        "name":  "owner",
+        "outputs":  [
+                        {
+                            "internalType":  "address",
+                            "name":  "",
+                            "type":  "address"
+                        }
+                    ],
+        "stateMutability":  "view",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       },
+                       {
+                           "internalType":  "bool",
+                           "name":  "triggered",
+                           "type":  "bool"
+                       }
+                   ],
+        "name":  "recordFindingIfTriggered",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "auditor",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       },
+                       {
+                           "internalType":  "bool",
+                           "name":  "triggered",
+                           "type":  "bool"
+                       }
+                   ],
+        "name":  "recordFindingIfTriggeredFor",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "internalType":  "uint8",
+                           "name":  "testType",
+                           "type":  "uint8"
+                       }
+                   ],
+        "name":  "requestFindingCreation",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "newLimit",
+                           "type":  "uint256"
+                       }
+                   ],
+        "name":  "setMaxActiveAuditors",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "uint256",
+                           "name":  "paymentId",
+                           "type":  "uint256"
+                       },
+                       {
+                           "internalType":  "address",
+                           "name":  "approver",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "ebool",
+                           "name":  "breach",
+                           "type":  "bytes32"
+                       },
+                       {
+                           "internalType":  "euint64",
+                           "name":  "authLevelHandle",
+                           "type":  "bytes32"
+                       }
+                   ],
+        "name":  "storeAuthBreachResult",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    },
+    {
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "newOwner",
+                           "type":  "address"
+                       }
+                   ],
+        "name":  "transferOwnership",
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable",
+        "type":  "function"
+    }
 ]

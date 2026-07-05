@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { sepolia } from "wagmi/chains";
+import type { Abi } from "viem";
 import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { ComplyrFactoryAddress } from "@/lib/CA";
@@ -80,7 +81,7 @@ export function useOnboardingState(): {
     refetch: refetchThresholds,
   } = useReadContract({
     address: reg?.auditRegistry,
-    abi: AuditRegistryAbi.abi,
+    abi: AuditRegistryAbi as Abi,
     functionName: "authThresholdsConfigured",
     chainId: sepolia.id,
     query: {

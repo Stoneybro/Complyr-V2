@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Loader2, ShieldAlert, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { toHex } from "viem";
+import { toHex, type Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { getFhevmInstance } from "@/lib/fhe";
@@ -85,7 +85,7 @@ export function ThresholdEditor({
 
       writeContract({
         address: auditRegistryAddress,
-        abi: AuditRegistryAbi.abi,
+        abi: AuditRegistryAbi as Abi,
         functionName: "setAuthTierThresholds",
         args: [encManager, encDirector, encBoard, inputProof],
         chainId: sepolia.id,

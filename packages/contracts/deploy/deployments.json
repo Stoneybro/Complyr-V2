@@ -1,34 +1,34 @@
 {
   "network": "sepolia",
   "chainId": 11155111,
-  "deployedAt": "2026-07-03T14:43:56.854Z",
+  "deployedAt": "2026-07-05T02:45:14.232Z",
   "deployer": "0x0D96081998fd583334fd1757645B40fdD989B267",
   "contracts": {
     "ConfidentialUSDC": {
-      "address": "0x5b1f28c9A7eCB4fB7D1f5cCD28C28c9Fa00D43b3",
+      "address": "0x64E156959bf6ce61129Fb4D289367Bbc7C80BeD4",
       "description": "ERC-7984 confidential USDC wrapper"
     },
     "AuditRegistryImpl": {
-      "address": "0x0209Da43fcA6d2859E4Fd628Ccc10f026fc2E070",
+      "address": "0x852DC4f5e3e7C20141f681867277c2805e4546Af",
       "description": "AuditRegistry EIP-1167 clone target (not used directly)"
     },
     "ReviewTestRegistryImpl": {
-      "address": "0x793F1Fae3d7704F2449e80237671BCfb56f6f6D4",
+      "address": "0x1620792b2FfcE79745541d3Ff4E94cedfe2903d3",
       "description": "ReviewTestRegistry EIP-1167 clone target (not used directly)"
     },
     "ComplyrFactory": {
-      "address": "0xCfF5B0f4165110f597EF9B4795CD155c9FdE5820",
+      "address": "0xC50558268DD168734E79822b85a87Fce7BF0d453",
       "description": "Clone deployer — call deployRegistry() as your own wallet to self-register"
     }
   },
   "testBusiness": {
     "address": "0x0D96081998fd583334fd1757645B40fdD989B267",
     "AuditRegistry": {
-      "address": "0x76CCB37FadE793b56b8527EFAE7299129dd56e53",
+      "address": "0x3981D756BD7740e13AB575AceD466FF04126F0c6",
       "description": "Per-business AuditRegistry clone (configured for demo)"
     },
     "ReviewTestRegistry": {
-      "address": "0xc7A38060b26bBC34894580dED339064CBc1099F4",
+      "address": "0x81d9D9550D238Fe12373E34f6f9F113A4aD15B04",
       "description": "Per-business ReviewTestRegistry clone (configured for demo)"
     }
   }

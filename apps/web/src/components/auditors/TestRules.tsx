@@ -1,16 +1,17 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useAccount, useReadContract, useReadContracts } from "wagmi";
+import { useAccount, useReadContracts } from "wagmi";
 import { sepolia } from "wagmi/chains";
+import type { Abi } from "viem";
 import {
-  Loader2, Settings, ShieldCheck, AlertTriangle, Clock, CheckCircle2, Lock, ListFilter,
+  Settings, ShieldCheck, Clock, CheckCircle2, Lock, ListFilter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ReviewTestRegistryAbi from "@/lib/abis/ReviewTestRegistry.json";
 import { TestConfigurator } from "./TestConfigurator";
-import { getCategoryOptions, CATEGORY_LABELS } from "@/lib/audit-enums";
+import { CATEGORY_LABELS } from "@/lib/audit-enums";
 
 interface TestRulesProps {
   reviewRegistryAddress: `0x${string}`;
@@ -67,18 +68,34 @@ const TEST_DEFINITIONS = [
 ];
 
 const PRIORITY_LABELS = ["None", "Monitoring", "Standard", "Critical"];
+const CONFIGURABLE_TESTS = TEST_DEFINITIONS.filter((t) => t.configurable);
+const CONFIGURABLE_TEST_IDS = CONFIGURABLE_TESTS.map((t) => t.id);
 
-export function TestRules({ reviewRegistryAddress, accessLevel }: TestRulesProps) {
+type TestConfigResult = readonly [
+  priority: number | bigint,
+  scope: number | bigint,
+  monitoringFrequency: number | bigint,
+  exists: boolean,
+  threshold: `0x${string}`,
+];
+
+export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
   const { address } = useAccount();
   const [configuringTest, setConfiguringTest] = useState<number | null>(null);
 
-  const contracts = TEST_DEFINITIONS.filter((t) => t.configurable).map((test) => ({
-    address: reviewRegistryAddress,
-    abi: ReviewTestRegistryAbi as any,
-    functionName: "getTest",
-    args: [address, test.id],
-    chainId: sepolia.id,
-  }));
+  const contracts = useMemo(
+    () =>
+      address
+        ? CONFIGURABLE_TESTS.map((test) => ({
+            address: reviewRegistryAddress,
+            abi: ReviewTestRegistryAbi as Abi,
+            functionName: "getTest",
+            args: [address, test.id],
+            chainId: sepolia.id,
+          }))
+        : [],
+    [address, reviewRegistryAddress]
+  );
 
   const { data: testResults, refetch } = useReadContracts({
     contracts,
@@ -86,17 +103,16 @@ export function TestRules({ reviewRegistryAddress, accessLevel }: TestRulesProps
   });
 
   // Map results back by testId since we only fetched configurable tests
-  const configurableIds = TEST_DEFINITIONS.filter((t) => t.configurable).map((t) => t.id);
   const testResultMap = useMemo(() => {
-    const map: Record<number, any> = {};
-    configurableIds.forEach((id, i) => {
-      map[id] = testResults?.[i]?.result;
+    const map: Record<number, TestConfigResult | undefined> = {};
+    CONFIGURABLE_TEST_IDS.forEach((id, i) => {
+      map[id] = testResults?.[i]?.result as TestConfigResult | undefined;
     });
     return map;
-  }, [testResults, configurableIds]);
+  }, [testResults]);
 
   const isConfigured = (testId: number): boolean => {
-    const d = testResultMap[testId] as any;
+    const d = testResultMap[testId];
     return !!d && d[3] === true && Number(d[0]) !== 0;
   };
 
@@ -126,7 +142,7 @@ export function TestRules({ reviewRegistryAddress, accessLevel }: TestRulesProps
   };
 
   const getTestDetails = (testId: number, requiresScope?: boolean) => {
-    const d = testResultMap[testId] as any;
+    const d = testResultMap[testId];
     if (!d || Number(d[0]) === 0 || !d[3]) return null;
 
     const priority = PRIORITY_LABELS[Number(d[0])];

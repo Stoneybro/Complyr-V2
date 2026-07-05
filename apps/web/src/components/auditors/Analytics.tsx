@@ -8,7 +8,7 @@ import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { CATEGORY_LABELS } from "@/lib/audit-enums";
 import type { Abi } from "viem";
 
-const auditRegistryAbi = AuditRegistryAbi.abi as Abi;
+const auditRegistryAbi = AuditRegistryAbi as Abi;
 const CATEGORY_COUNT = 8;
 
 interface AnalyticsProps {

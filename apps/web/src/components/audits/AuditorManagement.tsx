@@ -67,7 +67,7 @@ interface AuditorManagementProps {
 }
 
 const MAX_AUDITORS = 5;
-const auditRegistryAbi = AuditRegistryAbi.abi as Abi;
+const auditRegistryAbi = AuditRegistryAbi as Abi;
 
 function mapAccessStringToEnum(value: string): AuditorAccess {
   switch (value) {

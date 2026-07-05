@@ -103,6 +103,12 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
     // ─── State Variables ─────────────────────────────────────────────────────
 
+    // ─── Relay ────────────────────────────────────────────────────────────────
+    // Hardcoded relay wallet — submits recordFindingIfTriggeredFor on behalf of
+    // registered auditors. Does NOT consume an auditor slot. No on-chain config
+    // needed — the relay is a trusted infrastructure wallet for Complyr V2.
+    address private constant RELAY = 0x0D96081998fd583334fd1757645B40fdD989B267;
+
     // NOTE: not immutable — EIP-1167 clone pattern
     IAuditRegistry public auditRegistry;
     address        public owner;
@@ -133,6 +139,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     event TestsEvaluated(uint256 indexed paymentId, uint256 auditorCount);
     event TestEvaluated(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType, ebool result);
     event FindingRequested(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType);
+    event RelayFindingSubmitted(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType);
 
     // ─── Errors ──────────────────────────────────────────────────────────────
 
@@ -387,6 +394,47 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         );
     }
 
+    /// @notice Relay-only entry point. The hardcoded RELAY wallet submits finding
+    ///         creation on behalf of a registered auditor. The relay is trusted
+    ///         infrastructure — it does NOT need to be in the auditor slot array
+    ///         and consumes zero auditor slots.
+    ///
+    ///         The auditor param must still have ANALYTICS or FULL access (the business
+    ///         controls whose results get automatically relayed). The relay simply
+    ///         acts as the transaction submitter so auditors never need to sign.
+    ///
+    ///         triggered is always true when called from the relay (the relay only
+    ///         submits for events where the ebool result fired). Passing false is a
+    ///         no-op and exists for symmetry with recordFindingIfTriggered.
+    function recordFindingIfTriggeredFor(
+        address auditor,
+        uint256 paymentId,
+        uint8   testType,
+        bool    triggered
+    ) external {
+        if (msg.sender != RELAY) revert Unauthorized();
+        _requireApprovedAuditor(auditor);  // auditor must still be registered by the business
+        if (!_isValidTestType(testType)) revert InvalidTestType();
+        if (!_hasTestResult[auditor][paymentId][testType]) revert ResultNotAvailable();
+
+        if (!triggered) return;
+
+        ReviewTest storage testConfig = _tests[auditor][testType];
+        euint64 flaggedHandle = _testedValues[auditor][paymentId][testType];
+
+        auditRegistry.recordFinding(
+            paymentId,
+            testType,
+            uint8(testConfig.priority),
+            flaggedHandle,
+            bytes32(0),
+            auditor,
+            false
+        );
+
+        emit RelayFindingSubmitted(auditor, paymentId, testType);
+    }
+
     // ─── Authorization Breach Result Storage (called by AuditRegistry.approvePayment) ──
 
     /// @notice Stores a pre-computed AUTHORIZATION_BREACH result from AuditRegistry.
@@ -436,7 +484,11 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         view
         returns (Priority priority, uint8 scope, uint16 monitoringFrequency, bool exists, euint64 threshold)
     {
-        if (msg.sender != auditor && msg.sender != owner) revert Unauthorized();
+        // No caller restriction: all returned fields are either non-sensitive metadata
+        // (priority, scope, monitoringFrequency, exists) or an FHE-encrypted handle
+        // (euint64 threshold) that is unreadable without a decryption grant scoped to
+        // the auditor. Removing this guard allows wagmi eth_call reads (msg.sender = 0x0)
+        // to succeed so the UI can reflect configured test state correctly.
         if (!_isValidTestType(testType)) revert InvalidTestType();
         ReviewTest storage testConfig = _tests[auditor][testType];
         return (

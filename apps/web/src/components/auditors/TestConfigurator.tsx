@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
-import { toHex } from "viem";
+import { toHex, type Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import ReviewTestRegistryAbi from "@/lib/abis/ReviewTestRegistry.json";
 import { getFhevmInstance } from "@/lib/fhe";
@@ -13,7 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 interface TestConfiguratorProps {
   testId: number;
-  testDefinition: any;
+  testDefinition: {
+    name: string;
+    requiresScope?: boolean;
+  };
   reviewRegistryAddress: `0x${string}`;
   onClose: () => void;
   onConfigured: () => void;
@@ -88,7 +91,7 @@ export function TestConfigurator({
 
       writeContract({
         address: reviewRegistryAddress,
-        abi: ReviewTestRegistryAbi as any,
+        abi: ReviewTestRegistryAbi as Abi,
         functionName: "createTest",
         args: [
           testId,

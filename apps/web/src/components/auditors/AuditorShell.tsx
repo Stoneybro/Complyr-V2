@@ -19,15 +19,19 @@ interface AuditorShellProps {
     deployedAtBlock: bigint;
   }) => React.ReactNode;
   onPhaseChange?: (isReady: boolean) => void;
+  onAccessLevelChange?: (level: number) => void;
 }
 
-export function AuditorShell({ businessAddress, children, onPhaseChange }: AuditorShellProps) {
+export function AuditorShell({ businessAddress, children, onPhaseChange, onAccessLevelChange }: AuditorShellProps) {
   const { state } = useAuditorPortalState(businessAddress);
   const { disconnect } = useDisconnect();
 
   React.useEffect(() => {
     onPhaseChange?.(state.phase === "ready");
-  }, [state.phase, onPhaseChange]);
+    if (state.phase === "ready" && state.accessLevel !== undefined) {
+      onAccessLevelChange?.(state.accessLevel);
+    }
+  }, [state.phase, state.accessLevel, onPhaseChange, onAccessLevelChange]);
 
   if (state.phase === "loading") {
     return <SkeletonPage />;

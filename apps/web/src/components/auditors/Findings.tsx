@@ -12,7 +12,7 @@ import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { getFhevmInstance } from "@/lib/fhe";
 import type { Abi } from "viem";
 
-const auditRegistryAbi = AuditRegistryAbi.abi as Abi;
+const auditRegistryAbi = AuditRegistryAbi as Abi;
 
 const TEST_TYPE_LABELS: Record<number, string> = {
   0: "Materiality",

@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { sepolia } from "wagmi/chains";
+import type { Abi } from "viem";
 import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { ComplyrFactoryAddress } from "@/lib/CA";
@@ -57,7 +58,7 @@ export function useAuditorPortalState(businessAddress: `0x${string}`): {
     refetch: refetchAccess,
   } = useReadContract({
     address: reg?.auditRegistry,
-    abi: AuditRegistryAbi.abi,
+    abi: AuditRegistryAbi as Abi,
     functionName: "auditorProfile",
     args: [address ?? "0x0000000000000000000000000000000000000000"],
     chainId: sepolia.id,

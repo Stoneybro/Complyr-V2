@@ -62,11 +62,11 @@ export default function AuditorPortalPage() {
               onPhaseChange={(ready) => {
                 setIsReady(ready);
               }}
+              onAccessLevelChange={(level) => {
+                if (level !== currentAccessLevel) setCurrentAccessLevel(level);
+              }}
             >
               {({ auditRegistryAddress, reviewRegistryAddress, accessLevel, walletAddress, deployedAtBlock }) => {
-                // Sync accessLevel into state so the sidebar can read it
-                if (accessLevel !== currentAccessLevel) setCurrentAccessLevel(accessLevel);
-
                 return (
                   <div className="flex flex-1 flex-col px-6 py-4">
                     {activeView === "tests" && (

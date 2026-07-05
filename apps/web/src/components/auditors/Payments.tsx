@@ -12,7 +12,7 @@ import { CATEGORY_LABELS } from "@/lib/audit-enums";
 import { getFhevmInstance } from "@/lib/fhe";
 import type { Abi } from "viem";
 
-const auditRegistryAbi = AuditRegistryAbi.abi as Abi;
+const auditRegistryAbi = AuditRegistryAbi as Abi;
 const USDC_DECIMALS = 1_000_000n;
 
 function formatUsdc(raw: bigint): string {

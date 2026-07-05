@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Loader2, Plus, UserX, Check, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { toHex, isAddress } from "viem";
+import { toHex, isAddress, type Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { getFhevmInstance } from "@/lib/fhe";
@@ -49,7 +49,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
     }
     writeAuth({
       address: auditRegistryAddress,
-      abi: AuditRegistryAbi.abi,
+      abi: AuditRegistryAbi as Abi,
       functionName: "setAuthorizedApprover",
       args: [approverAddress as `0x${string}`, authorized],
       chainId: sepolia.id,
@@ -76,7 +76,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
 
       writeTier({
         address: auditRegistryAddress,
-        abi: AuditRegistryAbi.abi,
+        abi: AuditRegistryAbi as Abi,
         functionName: "setApproverTier",
         args: [approverAddress as `0x${string}`, encTier, inputProof],
         chainId: sepolia.id,
