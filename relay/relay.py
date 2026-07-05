@@ -2,55 +2,56 @@
 Complyr V2 — Finding Relay
 ──────────────────────────
 Watches TestEvaluated events on all RegisterTestRegistry contracts deployed via
-ComplyrFactory and automatically calls recordFindingIfTriggeredFor() so auditors
-never need to sign a transaction to create findings.
-
-Designed to run as a Hugging Face Space (Gradio or plain Python SDK app).
-
-Required HF Secrets (set in Space Settings → Repository Secrets):
-  RELAY_PRIVATE_KEY   — private key of the relay wallet (0x0D96081998fd583334fd1757645B40fdD989B267)
-  SEPOLIA_RPC_URL     — e.g. https://sepolia.infura.io/v3/YOUR_KEY
-  FACTORY_ADDRESS     — 0xC50558268DD168734E79822b85a87Fce7BF0d453
-
-Optional:
-  POLL_INTERVAL_SECS  — seconds between polls (default: 30)
-  START_BLOCK         — block to start scanning from on first run (default: factory deploy block)
+ComplyrFactory and automatically calls recordFindingIfTriggeredFor().
 """
 
 import os
 import json
 import time
-import logging
 import threading
+import re
+import subprocess
 from pathlib import Path
+from datetime import datetime
 
 import gradio as gr
 from web3 import Web3
-from web3.middleware import ExtraDataToPOAMiddleware
 
+# ─── Constants ───────────────────────────────────────────────────────────────
 
-# ─── Logging ──────────────────────────────────────────────────────────────────
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%SZ",
-)
-log = logging.getLogger("relay")
-
-# ─── Config ───────────────────────────────────────────────────────────────────
-
-RPC_URL          = os.environ["SEPOLIA_RPC_URL"]
-RELAY_PRIVATE_KEY = os.environ["RELAY_PRIVATE_KEY"]
-FACTORY_ADDRESS  = Web3.to_checksum_address(os.environ["FACTORY_ADDRESS"])
-POLL_INTERVAL    = int(os.environ.get("POLL_INTERVAL_SECS", "5"))
-# Block from which to start scanning on a fresh run (factory deploy block).
-# Overridden if state file exists.
+POLL_INTERVAL       = int(os.environ.get("POLL_INTERVAL_SECS", "5"))
 DEFAULT_START_BLOCK = int(os.environ.get("START_BLOCK", "11205602"))
+MAX_BLOCK_RANGE     = int(os.environ.get("MAX_BLOCK_RANGE", "100"))  # Alchemy eth_getLogs limit
+ARCHIVE_SKIP_THRESHOLD = 2000  # If we're this many blocks behind, skip to current (archive restriction)
+STATE_FILE          = Path("/tmp/relay_state.json")
+LOG_FILE            = Path("/tmp/relay_logs.txt")
+SCRIPT_DIR          = Path(__file__).resolve().parent
 
-STATE_FILE = Path("/tmp/relay_state.json")  # persists last-processed block between polls
+CHAIN_ID            = int(os.environ.get("CHAIN_ID", "11155111"))
+FHEVM_RELAYER_URL   = os.environ.get("FHEVM_RELAYER_URL", "https://relayer.testnet.zama.org").strip()
 
-# ─── ABIs (minimal — only what the relay needs) ───────────────────────────────
+# Ensure log file exists
+if not LOG_FILE.exists():
+    LOG_FILE.write_text("Relay logs initialized...\n")
+
+# ─── Custom Logger (Prints + Writes to file for UI) ──────────────────────────
+
+def log(level: str, message: str):
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = f"{timestamp} [{level}] {message}"
+    
+    # 1. Print directly to stdout with flush=True (bypasses logging module quirks)
+    print(line, flush=True)
+    
+    # 2. Append to log file for Gradio UI to read (keep last 100 lines)
+    try:
+        lines = LOG_FILE.read_text().splitlines()
+        lines.append(line)
+        LOG_FILE.write_text("\n".join(lines[-100:]))
+    except Exception as e:
+        print(f"Failed to write log to file: {e}", flush=True)
+
+# ─── ABIs (minimal) ─────────────────────────────────────────────────────────
 
 FACTORY_ABI = [
     {"inputs": [], "name": "businessCount", "outputs": [{"type": "uint256"}], "stateMutability": "view", "type": "function"},
@@ -66,7 +67,6 @@ FACTORY_ABI = [
 ]
 
 REVIEW_REGISTRY_ABI = [
-    # recordFindingIfTriggeredFor(address auditor, uint256 paymentId, uint8 testType, bool triggered)
     {
         "inputs": [
             {"name": "auditor",   "type": "address"},
@@ -81,10 +81,7 @@ REVIEW_REGISTRY_ABI = [
     },
 ]
 
-# TestEvaluated event topic0 — keccak256("TestEvaluated(address,uint256,uint8,bytes32)")
-TEST_EVALUATED_TOPIC = Web3.keccak(
-    text="TestEvaluated(address,uint256,uint8,bytes32)"
-).hex()
+TEST_EVALUATED_TOPIC = Web3.keccak(text="TestEvaluated(address,uint256,uint8,bytes32)").hex()
 
 # ─── State helpers ────────────────────────────────────────────────────────────
 
@@ -96,98 +93,212 @@ def load_state() -> dict:
 def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state))
 
+def hexstr(value) -> str:
+    if hasattr(value, "hex"):
+        value = value.hex()
+    value = str(value)
+    return value if value.startswith("0x") else f"0x{value}"
+
+def parse_kms_stdout(output: str) -> bool:
+    for line in output.splitlines():
+        match = re.fullmatch(r"RESULT:(true|false)", line.strip())
+        if match:
+            return match.group(1) == "true"
+    raise ValueError(f"Unexpected KMS output: {output!r}")
+
 # ─── Main relay loop ──────────────────────────────────────────────────────────
 
-def main():
-    w3 = Web3(Web3.HTTPProvider(RPC_URL))
-    w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+def run_relay():
+    log("INFO", "Relay thread is starting...")
+    
+    # Strip any accidental newlines or whitespace (like %0a from copy/paste)
+    rpc_url           = os.environ.get("SEPOLIA_RPC_URL", "").strip()
+    relay_private_key = os.environ.get("RELAY_PRIVATE_KEY", "").strip()
+    factory_address   = os.environ.get("FACTORY_ADDRESS", "").strip()
 
-    relay_account = w3.eth.account.from_key(RELAY_PRIVATE_KEY)
-    log.info("Relay wallet : %s", relay_account.address)
-    log.info("Factory      : %s", FACTORY_ADDRESS)
+    if not all([rpc_url, relay_private_key, factory_address]):
+        log("ERROR", "Missing secrets! Please add SEPOLIA_RPC_URL, RELAY_PRIVATE_KEY, and FACTORY_ADDRESS")
+        return
 
-    factory = w3.eth.contract(address=FACTORY_ADDRESS, abi=FACTORY_ABI)
-    state   = load_state()
+    try:
+        factory_address = Web3.to_checksum_address(factory_address)
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
+        relay_account = w3.eth.account.from_key(relay_private_key)
+        
+        log("INFO", f"Relay wallet : {relay_account.address}")
+        log("INFO", f"Factory      : {factory_address}")
+        log("INFO", f"Poll interval: {POLL_INTERVAL}s")
+        log("INFO", f"FHEVM Relayer: {FHEVM_RELAYER_URL}")
+
+        factory = w3.eth.contract(address=factory_address, abi=FACTORY_ABI)
+        state   = load_state()
+
+        # If we're far behind the chain tip, skip archive history (Alchemy free tier blocks it)
+        try:
+            current_tip = w3.eth.block_number
+            blocks_behind = current_tip - state["last_block"]
+            if blocks_behind > ARCHIVE_SKIP_THRESHOLD:
+                log("WARNING", f"State is {blocks_behind} blocks behind (last={state['last_block']}, tip={current_tip}). Skipping to tip to avoid archive restriction.")
+                state["last_block"] = current_tip
+                save_state(state)
+        except Exception:
+            pass  # Will be caught in the poll loop
+
+    except Exception as e:
+        log("ERROR", f"Failed to initialize Web3/Contracts: {e}")
+        return
 
     while True:
         try:
-            latest_block = w3.eth.block_number
-            from_block   = state["last_block"]
+            # --- Step 1: Get latest block ---
+            try:
+                latest_block = w3.eth.block_number
+            except Exception as e:
+                log("ERROR", f"[eth_blockNumber failed] {type(e).__name__}: {e}")
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            from_block = state["last_block"]
 
             if from_block > latest_block:
-                log.info("No new blocks (latest=%d). Sleeping %ds.", latest_block, POLL_INTERVAL)
+                log("INFO", f"No new blocks (latest={latest_block}). Sleeping...")
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # ── Discover all active ReviewTestRegistry addresses ───────────────
-            business_count = factory.functions.businessCount().call()
+            # --- Step 2: Read factory ---
+            try:
+                business_count = factory.functions.businessCount().call()
+            except Exception as e:
+                log("ERROR", f"[businessCount() failed] {type(e).__name__}: {e}")
+                time.sleep(POLL_INTERVAL)
+                continue
+
             registry_addresses: list[str] = []
             for i in range(business_count):
-                biz    = factory.functions.businesses(i).call()
-                reg    = factory.functions.registries(biz).call()
-                active, review_addr = reg[2], reg[1]
-                if active and review_addr != "0x" + "0" * 40:
-                    registry_addresses.append(Web3.to_checksum_address(review_addr))
+                try:
+                    biz = factory.functions.businesses(i).call()
+                    reg = factory.functions.registries(biz).call()
+                    active, review_addr = reg[2], reg[1]
+                    if active and review_addr != "0x" + "0" * 40:
+                        registry_addresses.append(Web3.to_checksum_address(review_addr))
+                except Exception as e:
+                    log("ERROR", f"[registries({i}) failed] {type(e).__name__}: {e}")
 
             if not registry_addresses:
-                log.info("No active registries found. Sleeping.")
+                log("INFO", "No active registries found. Sleeping.")
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            log.info(
-                "Scanning blocks %d→%d across %d registry/ies",
-                from_block, latest_block, len(registry_addresses),
-            )
+            log("INFO", f"Scanning blocks {from_block}-{latest_block} across {len(registry_addresses)} registry/ies")
 
-            # ── Fetch TestEvaluated logs for all registries in one call each ──
-            # eth_getLogs per registry (batching across multiple addresses in one
-            # call is not universally supported by free-tier providers).
+            # --- Step 3: Fetch logs in chunks ---
             events_to_process: list[dict] = []
+            poll_had_retryable_failure = False
             for registry_addr in registry_addresses:
-                logs = w3.eth.get_logs({
-                    "address":   registry_addr,
-                    "fromBlock": from_block,
-                    "toBlock":   latest_block,
-                    "topics":    [TEST_EVALUATED_TOPIC],
-                })
-                for raw_log in logs:
-                    topics = raw_log["topics"]
-                    # topics[0] = event sig, topics[1] = auditor, topics[2] = paymentId, topics[3] = testType
-                    auditor    = Web3.to_checksum_address("0x" + topics[1].hex()[-40:])
-                    payment_id = int(topics[2].hex(), 16)
-                    test_type  = int(topics[3].hex(), 16)
-
-                    # Skip SoD (testType 2) — goes through createSodFinding, no stored result
-                    if test_type == 2:
+                chunk_start = from_block
+                while chunk_start <= latest_block:
+                    chunk_end = min(chunk_start + MAX_BLOCK_RANGE - 1, latest_block)
+                    try:
+                        raw_logs = w3.eth.get_logs({
+                            "address":   registry_addr,
+                            "fromBlock": chunk_start,
+                            "toBlock":   chunk_end,
+                            "topics":    [TEST_EVALUATED_TOPIC],
+                        })
+                    except Exception as e:
+                        err_str = str(e)
+                        if "400" in err_str or "Bad Request" in err_str:
+                            # Likely an Alchemy archive restriction — skip this chunk
+                            log("WARNING", f"[eth_getLogs blocks={chunk_start}-{chunk_end}] Archive block restricted (400). Skipping chunk.")
+                        else:
+                            log("ERROR", f"[eth_getLogs blocks={chunk_start}-{chunk_end}] {type(e).__name__}: {e}")
+                        chunk_start = chunk_end + 1
                         continue
 
-                    key = f"{registry_addr}:{auditor}:{payment_id}:{test_type}"
-                    if key in state["processed"]:
-                        continue  # already submitted
+                    for raw_log in raw_logs:
+                        topics = raw_log["topics"]
+                        auditor    = Web3.to_checksum_address("0x" + topics[1].hex()[-40:])
+                        payment_id = int(topics[2].hex(), 16)
+                        test_type  = int(topics[3].hex(), 16)
 
-                    events_to_process.append({
-                        "registry": registry_addr,
-                        "auditor":  auditor,
-                        "paymentId": payment_id,
-                        "testType":  test_type,
-                        "key":       key,
-                    })
+                        if test_type == 2:
+                            continue
+                        if test_type == 1:
+                            log("INFO", f"Skipping AUTHORIZATION_BREACH event for paymentId={payment_id}; it uses the payment-scoped auth-breach flow, not auditor-scoped relay findings.")
+                            continue
 
-            log.info("%d new event(s) to process", len(events_to_process))
+                        tx_hash = hexstr(raw_log["transactionHash"])
+                        log_index = int(raw_log["logIndex"])
+                        ebool_handle = hexstr(raw_log["data"])
 
-            # ── Submit recordFindingIfTriggeredFor for each new event ──────────
+                        key = f"{registry_addr}:{tx_hash}:{log_index}"
+                        if key in state["processed"]:
+                            continue
+
+                        events_to_process.append({
+                            "registry": registry_addr,
+                            "auditor":  auditor,
+                            "paymentId": payment_id,
+                            "testType":  test_type,
+                            "result":    ebool_handle,
+                            "blockNumber": int(raw_log["blockNumber"]),
+                            "key":       key,
+                        })
+                    chunk_start = chunk_end + 1
+
+            if events_to_process:
+                log("INFO", f"{len(events_to_process)} new event(s) to process")
+
+            # --- Step 4: Send transactions ---
             for evt in events_to_process:
+                log("INFO", f"Processing: auditor={evt['auditor']} paymentId={evt['paymentId']} testType={evt['testType']}")
                 registry_contract = w3.eth.contract(
                     address=Web3.to_checksum_address(evt["registry"]),
                     abi=REVIEW_REGISTRY_ABI,
                 )
+
+                # Fetch encrypted handle for this test evaluation
+                ebool_handle = evt["result"]
+
+                log("INFO", f"Requesting KMS decryption for handle {ebool_handle[:12]}...")
+                try:
+                    kms_env = os.environ.copy()
+                    kms_env["RELAY_PRIVATE_KEY"] = relay_private_key
+                    kms_env["KMS_DEBUG"] = "1"
+                    result = subprocess.run([
+                        "node", "kms_client.js",
+                        ebool_handle,
+                        evt["registry"],
+                        relay_account.address,
+                        rpc_url,
+                        FHEVM_RELAYER_URL,
+                    ], capture_output=True, text=True, check=True, cwd=SCRIPT_DIR, env=kms_env, timeout=120)
+                    
+                    is_triggered = parse_kms_stdout(result.stdout)
+                    
+                    log("INFO", f"KMS Decryption success: triggered={is_triggered}")
+                except subprocess.CalledProcessError as e:
+                    details = (e.stderr or e.stdout or str(e)).strip()
+                    log("ERROR", f"KMS Decryption failed for {evt['key']}: {details}")
+                    poll_had_retryable_failure = True
+                    continue
+                except Exception as e:
+                    log("ERROR", f"KMS Decryption failed for {evt['key']}: {type(e).__name__}: {e}")
+                    poll_had_retryable_failure = True
+                    continue
+
+                if not is_triggered:
+                    log("INFO", f"Test did not trigger (false). Skipping finding creation.")
+                    state["processed"].append(evt["key"])
+                    continue
+
                 try:
                     nonce = w3.eth.get_transaction_count(relay_account.address)
-                    tx    = registry_contract.functions.recordFindingIfTriggeredFor(
+                    tx = registry_contract.functions.recordFindingIfTriggeredFor(
                         evt["auditor"],
                         evt["paymentId"],
                         evt["testType"],
-                        True,   # triggered — relay only submits for fired events
+                        is_triggered,
                     ).build_transaction({
                         "from":  relay_account.address,
                         "nonce": nonce,
@@ -199,64 +310,69 @@ def main():
                     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
 
                     if receipt["status"] == 1:
-                        log.info(
-                            "✅ Finding created — registry=%s auditor=%s paymentId=%d testType=%d tx=%s",
-                            evt["registry"][:10], evt["auditor"][:10],
-                            evt["paymentId"], evt["testType"], tx_hash.hex()[:16],
-                        )
+                        log("INFO", f"Finding created - auditor={evt['auditor']} paymentId={evt['paymentId']} testType={evt['testType']} tx={tx_hash.hex()}")
                         state["processed"].append(evt["key"])
                     else:
-                        log.warning(
-                            "⚠️  Tx reverted — %s (auditor=%s paymentId=%d testType=%d)",
-                            tx_hash.hex()[:16], evt["auditor"][:10],
-                            evt["paymentId"], evt["testType"],
-                        )
-                        # Don't mark as processed — will retry next poll.
-                        # Common revert reason: _hasTestResult not set (test didn't actually
-                        # store a result for this auditor — e.g. auditor was deregistered).
-
+                        log("WARNING", f"Tx reverted - paymentId={evt['paymentId']} (auditor may be deregistered)")
+                        poll_had_retryable_failure = True
                 except Exception as e:
-                    log.error("Error processing event %s: %s", evt["key"], e)
+                    log("ERROR", f"[sendTx failed] {evt['key']}: {type(e).__name__}: {e}")
+                    poll_had_retryable_failure = True
 
-            # Advance the scan window
-            state["last_block"] = latest_block + 1
+            if poll_had_retryable_failure:
+                log("WARNING", "One or more events failed before final processing. Keeping block cursor unchanged so they retry.")
+            else:
+                state["last_block"] = latest_block + 1
+                if len(state["processed"]) > 5000:
+                    state["processed"] = state["processed"][-5000:]
             save_state(state)
 
         except Exception as e:
-            log.error("Poll cycle error: %s", e)
+            log("ERROR", f"[Unhandled poll error] {type(e).__name__}: {e}")
 
-        log.info("Sleeping %ds until next poll.", POLL_INTERVAL)
         time.sleep(POLL_INTERVAL)
 
 
-# ─── Gradio UI (required by HF Spaces to bind port 7860) ─────────────────────
+# ─── Start Background Thread ──────────────────────────────────────────────────
 
-def build_ui() -> gr.Blocks:
-    with gr.Blocks(title="Complyr Relay") as demo:
-        gr.Markdown(
-            """
-            # Complyr V2 — Finding Relay
-            This Space runs a background process that watches `TestEvaluated` events
-            on all active `ReviewTestRegistry` contracts and automatically submits
-            `recordFindingIfTriggeredFor()` so auditors never need to sign manually.
+log("INFO", "Initializing Node.js dependencies for KMS client...")
+try:
+    subprocess.run(["npm", "install"], cwd=SCRIPT_DIR, check=True, capture_output=True)
+    log("INFO", "Node dependencies installed successfully.")
+except Exception as e:
+    log("ERROR", f"Failed to install Node dependencies: {e}")
 
-            **Status: 🟢 Running** — check the container logs for polling activity.
+relay_thread = threading.Thread(target=run_relay, daemon=True, name="relay-loop")
+relay_thread.start()
+log("INFO", "Gradio app starting...")
 
-            | Setting | Value |
-            |---------|-------|
-            | Poll interval | every 5s |
-            | Network | Sepolia |
-            | Factory | `0xC50558268DD168734E79822b85a87Fce7BF0d453` |
-            """
-        )
-    return demo
+# ─── Gradio UI ───────────────────────────────────────────────────────────────
 
+def read_logs():
+    try:
+        return LOG_FILE.read_text()
+    except Exception:
+        return "No logs yet..."
+
+with gr.Blocks(title="Complyr Relay") as demo:
+    gr.Markdown("# Complyr V2 — Finding Relay")
+    gr.Markdown("**Status: 🟢 Running** — Watching for `TestEvaluated` events automatically.")
+    
+    with gr.Row():
+        with gr.Column():
+            gr.Markdown(f"**Network:** Sepolia\n**Poll Interval:** {POLL_INTERVAL}s")
+        with gr.Column():
+            gr.Markdown("**Live Logs:** (Auto-updates every 3s)")
+
+    log_box = gr.Textbox(
+        value=read_logs,
+        every=3,  # Gradio feature: calls read_logs() every 3 seconds to update the UI
+        lines=15,
+        max_lines=15,
+        show_label=False,
+        interactive=False,
+        elem_id="log-box",
+    )
 
 if __name__ == "__main__":
-    # Start the relay loop in a background daemon thread so it doesn't block Gradio
-    relay_thread = threading.Thread(target=main, daemon=True, name="relay-loop")
-    relay_thread.start()
-    log.info("Relay thread started. Launching Gradio status UI on port 7860.")
-
-    # Launch the Gradio UI — this is what HF Spaces needs to consider the app healthy
-    build_ui().launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860)

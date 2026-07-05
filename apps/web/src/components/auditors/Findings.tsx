@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { useReadContracts, usePublicClient } from "wagmi";
 import { sepolia } from "wagmi/chains";
 import { Loader2 } from "lucide-react";
@@ -59,8 +59,14 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
   const [decryptStates, setDecryptStates] = useState<Record<number, DecryptState>>({});
   const [decryptedValues, setDecryptedValues] = useState<Record<number, string>>({});
 
+  // Step 3 state — populated via direct eth_call (not multicall) so msg.sender = walletAddress
+  const [signalResults, setSignalResults] = useState<FindingSignal[]>([]);
+  const [signalLoading, setSignalLoading] = useState(false);
+
+  const publicClient = usePublicClient({ chainId: sepolia.id });
+
   // Step 1: get per-auditor finding count
-  const { data: countData, isLoading: countLoading } = useReadContracts({
+  const { data: countData, isLoading: countLoading, refetch: refetchCount } = useReadContracts({
     contracts: [
       {
         address: auditRegistryAddress,
@@ -70,6 +76,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
         chainId: sepolia.id,
       },
     ],
+    query: { refetchInterval: 10_000 },
   });
 
   const findingCount = Number(countData?.[0]?.result ?? 0);
@@ -83,7 +90,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
       args: [walletAddress, BigInt(i)],
       chainId: sepolia.id,
     })),
-    query: { enabled: findingCount > 0 },
+    query: { enabled: findingCount > 0, refetchInterval: 10_000 },
   });
 
   const findingIds = useMemo(
@@ -91,81 +98,103 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
     [indexData]
   );
 
-  // Step 3: fetch metadata for each finding using getFindingSignal
-  // (Both ANALYTICS and FULL use this — getFinding requires payment access that ANALYTICS doesn't have)
-  const { data: signalData, isLoading: signalLoading } = useReadContracts({
-    contracts: findingIds.map((id) => ({
-      address: auditRegistryAddress,
-      abi: auditRegistryAbi,
-      functionName: "getFindingSignal",
-      args: [BigInt(id)],
-      chainId: sepolia.id,
-    })),
-    query: { enabled: findingIds.length > 0 },
-  });
+  // Step 3: fetch signal data via direct eth_call (bypasses Multicall3 so msg.sender = walletAddress).
+  // useReadContracts batches through Multicall3 — inside multicall, msg.sender becomes the
+  // multicall contract address (NONE access), causing getFindingSignal to revert Unauthorized().
+  // publicClient.readContract sends a raw eth_call with account= so msg.sender is the auditor wallet.
+  const fetchSignals = useCallback(async () => {
+    if (!publicClient || findingIds.length === 0) {
+      setSignalResults([]);
+      return;
+    }
+    setSignalLoading(true);
+    try {
+      const results = await Promise.all(
+        findingIds.map((id) =>
+          publicClient.readContract({
+            address: auditRegistryAddress,
+            abi: auditRegistryAbi,
+            functionName: "getFindingSignal",
+            args: [BigInt(id)],
+            account: walletAddress, // sets from= in eth_call → msg.sender inside contract
+          })
+        )
+      );
 
-  const findings: FindingSignal[] = useMemo(() => {
-    return findingIds
-      .map((id, i) => {
-        const r = signalData?.[i]?.result as readonly [number, number, number, bigint, string, boolean] | undefined;
-        if (!r) return null;
-        return {
-          findingId: id,
-          testType: Number(r[0]),
-          severity: Number(r[1]),
-          triggeredAtBlock: Number(r[2]),
-          paymentId: Number(r[3]),
-          triggeredBy: r[4] as string,
-          isShared: r[5] as boolean,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => b!.triggeredAtBlock - a!.triggeredAtBlock) as FindingSignal[];
-  }, [findingIds, signalData]);
+      const parsed: FindingSignal[] = results
+        .map((r, i) => {
+          const tuple = r as readonly [number, number, number, bigint, string, boolean] | undefined;
+          if (!tuple) return null;
+          return {
+            findingId:        findingIds[i],
+            testType:         Number(tuple[0]),
+            severity:         Number(tuple[1]),
+            triggeredAtBlock: Number(tuple[2]),
+            paymentId:        Number(tuple[3]),
+            triggeredBy:      tuple[4] as string,
+            isShared:         tuple[5] as boolean,
+          };
+        })
+        .filter(Boolean) as FindingSignal[];
+
+      parsed.sort((a, b) => b.triggeredAtBlock - a.triggeredAtBlock);
+      setSignalResults(parsed);
+    } catch (err) {
+      console.error("getFindingSignal failed:", err);
+      setSignalResults([]);
+    } finally {
+      setSignalLoading(false);
+    }
+  }, [publicClient, findingIds, auditRegistryAddress, walletAddress]);
+
+  useEffect(() => {
+    fetchSignals();
+    const interval = setInterval(fetchSignals, 10_000);
+    return () => clearInterval(interval);
+  }, [fetchSignals]);
 
   // Step 4 (FULL only): check payment access for decrypt eligibility
   const { data: accessCheckData } = useReadContracts({
-    contracts: findings.map((f) => ({
+    contracts: signalResults.map((f) => ({
       address: auditRegistryAddress,
       abi: auditRegistryAbi,
       functionName: "paymentAccessGranted",
       args: [walletAddress, BigInt(f.paymentId)],
       chainId: sepolia.id,
     })),
-    query: { enabled: accessLevel >= 3 && findings.length > 0 },
+    query: { enabled: accessLevel >= 3 && signalResults.length > 0 },
   });
 
   const paymentAccessMap = useMemo(() => {
     const map: Record<number, boolean> = {};
-    findings.forEach((f, i) => {
+    signalResults.forEach((f, i) => {
       map[f.findingId] = Boolean(accessCheckData?.[i]?.result ?? false);
     });
     return map;
-  }, [findings, accessCheckData]);
+  }, [signalResults, accessCheckData]);
 
   const filtered = useMemo(() => {
-    return findings.filter((f) => {
+    return signalResults.filter((f) => {
       if (filterTest !== null && f.testType !== filterTest) return false;
       if (filterSeverity !== null && f.severity !== filterSeverity) return false;
       return true;
     });
-  }, [findings, filterTest, filterSeverity]);
+  }, [signalResults, filterTest, filterSeverity]);
 
   const isLoading = countLoading || indexLoading || signalLoading;
 
   const handleDecrypt = async (findingId: number) => {
     setDecryptStates((s) => ({ ...s, [findingId]: "decrypting" }));
     try {
-      const fhevm = await getFhevmInstance();
-      // Decrypt the flaggedHandle stored in the finding — requires FULL access + payment access
-      // We'd need getFinding() result here which has the handle; for now show placeholder
-      // This will be wired up once the decrypt flow is finalized
+      await getFhevmInstance();
       setDecryptedValues((v) => ({ ...v, [findingId]: "Decrypted (placeholder)" }));
       setDecryptStates((s) => ({ ...s, [findingId]: "done" }));
     } catch {
       setDecryptStates((s) => ({ ...s, [findingId]: "error" }));
     }
   };
+
+
 
   if (isLoading) {
     return (
@@ -175,7 +204,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
     );
   }
 
-  if (findings.length === 0) {
+  if (signalResults.length === 0) {
     return (
       <div className="max-w-4xl mx-auto w-full pb-12 space-y-6">
         <div className="flex flex-col gap-1 mb-6 border-b border-border pb-6">
@@ -198,7 +227,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
       <div className="flex flex-col gap-1 mb-6 border-b border-border pb-6">
         <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
         <p className="text-sm text-muted-foreground">
-          {findings.length} finding{findings.length !== 1 ? "s" : ""} in your engagement.
+          {signalResults.length} finding{signalResults.length !== 1 ? "s" : ""} in your engagement.
         </p>
       </div>
 

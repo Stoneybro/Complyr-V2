@@ -1,1086 +1,1020 @@
-﻿[
-    {
-        "inputs":  [
-
-                   ],
-        "stateMutability":  "nonpayable",
-        "type":  "constructor"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "AlreadyInitialized",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "AuditorLimitReached",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "InvalidAddress",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "NotOwner",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "NotReviewRegistry",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "NotToken",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "PaymentAlreadyApproved",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "PaymentNotFound",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "Reentrant",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "bytes32",
-                           "name":  "handle",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "address",
-                           "name":  "sender",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "SenderNotAllowedToUseHandle",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "ThresholdsNotConfigured",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "Unauthorized",
-        "type":  "error"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "ZamaProtocolUnsupported",
-        "type":  "error"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "approver",
-                           "type":  "address"
-                       },
-                       {
-                           "indexed":  false,
-                           "internalType":  "bool",
-                           "name":  "authorized",
-                           "type":  "bool"
-                       }
-                   ],
-        "name":  "ApproverAuthorizationSet",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "approver",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "ApproverTierSet",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "indexed":  false,
-                           "internalType":  "enum AuditRegistry.AuditorAccess",
-                           "name":  "access",
-                           "type":  "uint8"
-                       },
-                       {
-                           "indexed":  false,
-                           "internalType":  "uint32",
-                           "name":  "engagementId",
-                           "type":  "uint32"
-                       }
-                   ],
-        "name":  "AuditorAccessSet",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "by",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "AuthThresholdsSet",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "uint256",
-                           "name":  "findingId",
-                           "type":  "uint256"
-                       },
-                       {
-                           "indexed":  true,
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       },
-                       {
-                           "indexed":  false,
-                           "internalType":  "uint8",
-                           "name":  "testType",
-                           "type":  "uint8"
-                       },
-                       {
-                           "indexed":  false,
-                           "internalType":  "uint8",
-                           "name":  "severity",
-                           "type":  "uint8"
-                       }
-                   ],
-        "name":  "FindingCreated",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "uint256",
-                           "name":  "findingId",
-                           "type":  "uint256"
-                       },
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "escalatedBy",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "FindingEscalated",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "indexed":  false,
-                           "internalType":  "uint256",
-                           "name":  "recordCount",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "HistoricalAccessGranted",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "previousOwner",
-                           "type":  "address"
-                       },
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "newOwner",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "OwnerTransferred",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       },
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "approver",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "PaymentApproved",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       },
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "sender",
-                           "type":  "address"
-                       },
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "recipient",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "PaymentRecorded",
-        "type":  "event"
-    },
-    {
-        "anonymous":  false,
-        "inputs":  [
-                       {
-                           "indexed":  true,
-                           "internalType":  "address",
-                           "name":  "registry",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "ReviewTestRegistrySet",
-        "type":  "event"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "approvePayment",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "index",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "auditorAt",
-        "outputs":  [
-                        {
-                            "internalType":  "address",
-                            "name":  "",
-                            "type":  "address"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "auditorCount",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "",
-                            "type":  "uint256"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "uint256",
-                           "name":  "index",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "auditorFindingAt",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "",
-                            "type":  "uint256"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "auditorFindingCount",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "",
-                            "type":  "uint256"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "auditorProfile",
-        "outputs":  [
-                        {
-                            "internalType":  "enum AuditRegistry.AuditorAccess",
-                            "name":  "access",
-                            "type":  "uint8"
-                        },
-                        {
-                            "internalType":  "uint248",
-                            "name":  "engagementId",
-                            "type":  "uint248"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "authThresholdsConfigured",
-        "outputs":  [
-                        {
-                            "internalType":  "bool",
-                            "name":  "",
-                            "type":  "bool"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "approver",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "authorizedApprovers",
-        "outputs":  [
-                        {
-                            "internalType":  "bool",
-                            "name":  "authorized",
-                            "type":  "bool"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "confidentialProtocolId",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "",
-                            "type":  "uint256"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "confidentialToken",
-        "outputs":  [
-                        {
-                            "internalType":  "address",
-                            "name":  "",
-                            "type":  "address"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "findingId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "escalateFinding",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "findingCount",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "",
-                            "type":  "uint256"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "getAuditors",
-        "outputs":  [
-                        {
-                            "internalType":  "address[]",
-                            "name":  "",
-                            "type":  "address[]"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint8",
-                           "name":  "category",
-                           "type":  "uint8"
-                       }
-                   ],
-        "name":  "getCategoryTotal",
-        "outputs":  [
-                        {
-                            "internalType":  "euint64",
-                            "name":  "",
-                            "type":  "bytes32"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "findingId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "getFinding",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "paymentId",
-                            "type":  "uint256"
-                        },
-                        {
-                            "internalType":  "uint8",
-                            "name":  "testType",
-                            "type":  "uint8"
-                        },
-                        {
-                            "internalType":  "uint8",
-                            "name":  "severity",
-                            "type":  "uint8"
-                        },
-                        {
-                            "internalType":  "euint64",
-                            "name":  "flaggedHandle",
-                            "type":  "bytes32"
-                        },
-                        {
-                            "internalType":  "uint32",
-                            "name":  "triggeredAtBlock",
-                            "type":  "uint32"
-                        },
-                        {
-                            "internalType":  "bytes32",
-                            "name":  "narrativeHash",
-                            "type":  "bytes32"
-                        },
-                        {
-                            "internalType":  "bool",
-                            "name":  "escalated",
-                            "type":  "bool"
-                        },
-                        {
-                            "internalType":  "address",
-                            "name":  "triggeredBy",
-                            "type":  "address"
-                        },
-                        {
-                            "internalType":  "bool",
-                            "name":  "isShared",
-                            "type":  "bool"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "findingId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "getFindingSignal",
-        "outputs":  [
-                        {
-                            "internalType":  "uint8",
-                            "name":  "testType",
-                            "type":  "uint8"
-                        },
-                        {
-                            "internalType":  "uint8",
-                            "name":  "severity",
-                            "type":  "uint8"
-                        },
-                        {
-                            "internalType":  "uint32",
-                            "name":  "triggeredAtBlock",
-                            "type":  "uint32"
-                        },
-                        {
-                            "internalType":  "uint256",
-                            "name":  "paymentId",
-                            "type":  "uint256"
-                        },
-                        {
-                            "internalType":  "address",
-                            "name":  "triggeredBy",
-                            "type":  "address"
-                        },
-                        {
-                            "internalType":  "bool",
-                            "name":  "isShared",
-                            "type":  "bool"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "getPaymentHandles",
-        "outputs":  [
-                        {
-                            "internalType":  "euint64",
-                            "name":  "amount",
-                            "type":  "bytes32"
-                        },
-                        {
-                            "internalType":  "euint8",
-                            "name":  "category",
-                            "type":  "bytes32"
-                        },
-                        {
-                            "internalType":  "euint8",
-                            "name":  "authLevel",
-                            "type":  "bytes32"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "getPaymentMeta",
-        "outputs":  [
-                        {
-                            "internalType":  "address",
-                            "name":  "sender",
-                            "type":  "address"
-                        },
-                        {
-                            "internalType":  "address",
-                            "name":  "recipient",
-                            "type":  "address"
-                        },
-                        {
-                            "internalType":  "address",
-                            "name":  "approver",
-                            "type":  "address"
-                        },
-                        {
-                            "internalType":  "bytes32",
-                            "name":  "invoiceHash",
-                            "type":  "bytes32"
-                        },
-                        {
-                            "internalType":  "bytes32",
-                            "name":  "poHash",
-                            "type":  "bytes32"
-                        },
-                        {
-                            "internalType":  "uint32",
-                            "name":  "blockNumber",
-                            "type":  "uint32"
-                        },
-                        {
-                            "internalType":  "bool",
-                            "name":  "approved",
-                            "type":  "bool"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "recipient",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "getRecipientTotal",
-        "outputs":  [
-                        {
-                            "internalType":  "euint64",
-                            "name":  "",
-                            "type":  "bytes32"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "uint256[]",
-                           "name":  "paymentIds",
-                           "type":  "uint256[]"
-                       }
-                   ],
-        "name":  "grantHistoricalAccess",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "confidentialToken_",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "address",
-                           "name":  "initialOwner",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "initialize",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "address",
-                           "name":  "from",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "euint64",
-                           "name":  "amount",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "bytes",
-                           "name":  "data",
-                           "type":  "bytes"
-                       }
-                   ],
-        "name":  "onConfidentialTransferReceived",
-        "outputs":  [
-                        {
-                            "internalType":  "ebool",
-                            "name":  "",
-                            "type":  "bytes32"
-                        }
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "owner",
-        "outputs":  [
-                        {
-                            "internalType":  "address",
-                            "name":  "",
-                            "type":  "address"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       }
-                   ],
-        "name":  "paymentAccessGranted",
-        "outputs":  [
-                        {
-                            "internalType":  "bool",
-                            "name":  "",
-                            "type":  "bool"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "paymentCount",
-        "outputs":  [
-                        {
-                            "internalType":  "uint256",
-                            "name":  "",
-                            "type":  "uint256"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "uint256",
-                           "name":  "paymentId",
-                           "type":  "uint256"
-                       },
-                       {
-                           "internalType":  "uint8",
-                           "name":  "testType",
-                           "type":  "uint8"
-                       },
-                       {
-                           "internalType":  "uint8",
-                           "name":  "severity",
-                           "type":  "uint8"
-                       },
-                       {
-                           "internalType":  "euint64",
-                           "name":  "flaggedHandle",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "bytes32",
-                           "name":  "narrativeHash",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "bool",
-                           "name":  "isShared",
-                           "type":  "bool"
-                       }
-                   ],
-        "name":  "recordFinding",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-
-                   ],
-        "name":  "reviewTestRegistry",
-        "outputs":  [
-                        {
-                            "internalType":  "address",
-                            "name":  "",
-                            "type":  "address"
-                        }
-                    ],
-        "stateMutability":  "view",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "approver",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "externalEuint8",
-                           "name":  "tier",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "bytes",
-                           "name":  "inputProof",
-                           "type":  "bytes"
-                       }
-                   ],
-        "name":  "setApproverTier",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "auditor",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "enum AuditRegistry.AuditorAccess",
-                           "name":  "access",
-                           "type":  "uint8"
-                       },
-                       {
-                           "internalType":  "uint32",
-                           "name":  "engagementId",
-                           "type":  "uint32"
-                       }
-                   ],
-        "name":  "setAuditorAccess",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "externalEuint64",
-                           "name":  "managerThreshold",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "externalEuint64",
-                           "name":  "directorThreshold",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "externalEuint64",
-                           "name":  "boardThreshold",
-                           "type":  "bytes32"
-                       },
-                       {
-                           "internalType":  "bytes",
-                           "name":  "inputProof",
-                           "type":  "bytes"
-                       }
-                   ],
-        "name":  "setAuthTierThresholds",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "approver",
-                           "type":  "address"
-                       },
-                       {
-                           "internalType":  "bool",
-                           "name":  "authorized",
-                           "type":  "bool"
-                       }
-                   ],
-        "name":  "setAuthorizedApprover",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "registry",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "setReviewTestRegistry",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    },
-    {
-        "inputs":  [
-                       {
-                           "internalType":  "address",
-                           "name":  "newOwner",
-                           "type":  "address"
-                       }
-                   ],
-        "name":  "transferOwnership",
-        "outputs":  [
-
-                    ],
-        "stateMutability":  "nonpayable",
-        "type":  "function"
-    }
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AlreadyInitialized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "AuditorLimitReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotReviewRegistry",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PaymentAlreadyApproved",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PaymentNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Reentrant",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "handle",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "SenderNotAllowedToUseHandle",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ThresholdsNotConfigured",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Unauthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZamaProtocolUnsupported",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "authorized",
+        "type": "bool"
+      }
+    ],
+    "name": "ApproverAuthorizationSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      }
+    ],
+    "name": "ApproverTierSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum AuditRegistry.AuditorAccess",
+        "name": "access",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "engagementId",
+        "type": "uint32"
+      }
+    ],
+    "name": "AuditorAccessSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "by",
+        "type": "address"
+      }
+    ],
+    "name": "AuthThresholdsSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "findingId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "testType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "severity",
+        "type": "uint8"
+      }
+    ],
+    "name": "FindingCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "findingId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "escalatedBy",
+        "type": "address"
+      }
+    ],
+    "name": "FindingEscalated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "recordCount",
+        "type": "uint256"
+      }
+    ],
+    "name": "HistoricalAccessGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnerTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      }
+    ],
+    "name": "PaymentApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      }
+    ],
+    "name": "PaymentRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "registry",
+        "type": "address"
+      }
+    ],
+    "name": "ReviewTestRegistrySet",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "approvePayment",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "auditorAt",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "auditorCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "auditorFindingAt",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      }
+    ],
+    "name": "auditorFindingCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      }
+    ],
+    "name": "auditorProfile",
+    "outputs": [
+      {
+        "internalType": "enum AuditRegistry.AuditorAccess",
+        "name": "access",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint248",
+        "name": "engagementId",
+        "type": "uint248"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "authThresholdsConfigured",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      }
+    ],
+    "name": "authorizedApprovers",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "authorized",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "confidentialProtocolId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "confidentialToken",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "findingId",
+        "type": "uint256"
+      }
+    ],
+    "name": "escalateFinding",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "findingCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getAuditors",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "category",
+        "type": "uint8"
+      }
+    ],
+    "name": "getCategoryTotal",
+    "outputs": [
+      {
+        "internalType": "euint64",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "findingId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getFinding",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "testType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "severity",
+        "type": "uint8"
+      },
+      {
+        "internalType": "euint64",
+        "name": "flaggedHandle",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "triggeredAtBlock",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "narrativeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "escalated",
+        "type": "bool"
+      },
+      {
+        "internalType": "address",
+        "name": "triggeredBy",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "isShared",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "findingId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getFindingSignal",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "testType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "severity",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "triggeredAtBlock",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "triggeredBy",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "isShared",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPaymentHandles",
+    "outputs": [
+      {
+        "internalType": "euint64",
+        "name": "amount",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "euint8",
+        "name": "category",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "euint8",
+        "name": "authLevel",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPaymentMeta",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "invoiceHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "poHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "blockNumber",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "approved",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      }
+    ],
+    "name": "getRecipientTotal",
+    "outputs": [
+      {
+        "internalType": "euint64",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "paymentIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "grantHistoricalAccess",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "confidentialToken_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "initialOwner",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "internalType": "euint64",
+        "name": "amount",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "onConfidentialTransferReceived",
+    "outputs": [
+      {
+        "internalType": "ebool",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "paymentAccessGranted",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "paymentCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "paymentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "testType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "severity",
+        "type": "uint8"
+      },
+      {
+        "internalType": "euint64",
+        "name": "flaggedHandle",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "narrativeHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "isShared",
+        "type": "bool"
+      }
+    ],
+    "name": "recordFinding",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reviewTestRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      },
+      {
+        "internalType": "externalEuint8",
+        "name": "tier",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "inputProof",
+        "type": "bytes"
+      }
+    ],
+    "name": "setApproverTier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "auditor",
+        "type": "address"
+      },
+      {
+        "internalType": "enum AuditRegistry.AuditorAccess",
+        "name": "access",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "engagementId",
+        "type": "uint32"
+      }
+    ],
+    "name": "setAuditorAccess",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "externalEuint64",
+        "name": "managerThreshold",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "externalEuint64",
+        "name": "directorThreshold",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "externalEuint64",
+        "name": "boardThreshold",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "inputProof",
+        "type": "bytes"
+      }
+    ],
+    "name": "setAuthTierThresholds",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "authorized",
+        "type": "bool"
+      }
+    ],
+    "name": "setAuthorizedApprover",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "registry",
+        "type": "address"
+      }
+    ],
+    "name": "setReviewTestRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
 ]

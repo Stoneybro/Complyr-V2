@@ -1,0 +1,13 @@
+{
+  "name": "relay-kms-client",
+  "version": "1.0.0",
+  "description": "Node.js helper for Zama FHEVM KMS decryption",
+  "main": "kms_client.js",
+  "scripts": {
+    "start": "node kms_client.js"
+  },
+  "dependencies": {
+    "@zama-fhe/relayer-sdk": "^0.4.4",
+    "ethers": "^6.11.1"
+  }
+}

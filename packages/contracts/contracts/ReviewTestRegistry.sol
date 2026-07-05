@@ -463,6 +463,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         FHE.allowThis(authLevelHandle);
         // approver retains personal decrypt access
         FHE.allow(breach, approver);
+        FHE.allow(breach, RELAY);
 
         emit TestEvaluated(approver, paymentId, testType, breach);
     }
@@ -536,6 +537,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
         FHE.allowThis(result);
         FHE.allow(result, auditor);
+        FHE.allow(result, RELAY);
 
         emit TestEvaluated(auditor, paymentId, testType, result);
     }
