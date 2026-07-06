@@ -10,9 +10,9 @@ const features = [
     body: 'Automated, stateful recurring payments. Manage employee salaries and subscriptions securely on-chain.',
   },
   {
-    icon: 'layers',
-    title: 'Batch Payouts',
-    body: 'Execute mass vendor payments in a single transaction. Highly scalable infrastructure designed to save gas.',
+    icon: 'verified_user',
+    title: 'Segregation of Duties',
+    body: 'Enforce strict approval workflows natively. Ensure no single party can unilaterally move funds beyond thresholds.',
   },
   {
     icon: 'payments',

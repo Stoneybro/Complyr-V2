@@ -37,7 +37,6 @@
 - Headline: "Everything a corporate treasury needs. Nothing it doesn't."
 - Features:
   - "Payroll & Subscriptions": "Automated, stateful recurring payments. Manage employee salaries and subscriptions securely on-chain."
-  - "Batch Payouts": "Execute mass vendor payments in a single transaction. Highly scalable infrastructure designed to save gas."
   - "Single Transfers": "Fast, reliable direct B2B transactions. The foundational layer for moving treasury funds efficiently."
   - "Encrypted Audit Layer": "Zama FHE lets the contract run checks on private data without decrypting it. Auditors get answers, not access."
   - "Account Abstraction": "Seamless gasless transactions and simple Web2-style social logins for frictionless enterprise onboarding."
@@ -150,12 +149,6 @@
   - Description: "Securely attach GL categories and evidence to the transaction onchain."
   - Inputs: "GL Category (Encrypted)", "Invoice (Optional)", "Purchase Order (Optional)"
   - Info Text: "GL categories are FHE-encrypted before leaving your browser. Files are hashed locally (keccak256) — the raw file is never uploaded."
-
-**Payment Form - Batch Payment Tab**
-- Section Title: "Batch Transfer"
-- Description: "Send multiple transactions efficiently in a single batch."
-- Button: "Add Empty Row"
-- Validation Error: "Batch payments require at least 2 recipients", "Amount must be greater than 0", "GL Category is required"
 
 **Workflow Settings & Submit**
 - Section Title: "Workflow Settings"
