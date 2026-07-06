@@ -4,6 +4,9 @@ import * as React from "react";
 import { useState } from "react";
 import { Loader2, Plus, UserX, Check, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Field, FieldLabel, FieldDescription, FieldGroup } from "@/components/ui/field";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { toHex, isAddress, type Abi } from "viem";
 import { sepolia } from "wagmi/chains";
@@ -95,19 +98,18 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-6">
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">
-            Approver Wallet Address
-          </label>
-          <input
+      <div className="space-y-6">
+        <Field>
+          <FieldLabel htmlFor="approver-address">Approver Wallet Address</FieldLabel>
+          <Input
+            id="approver-address"
             type="text"
             value={approverAddress}
             onChange={(e) => setApproverAddress(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="font-mono"
             placeholder="0x..."
           />
-        </div>
+        </Field>
 
         {error && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -116,7 +118,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
         )}
 
         {/* Authorize Section */}
-        <div className="flex flex-col sm:flex-row gap-3 pt-2 pb-4 border-b border-border">
+        <div className="flex flex-col sm:flex-row gap-3 pb-6 border-b border-border">
           <Button
             variant="default"
             onClick={() => handleAuthorize(true)}
@@ -142,25 +144,27 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
         </div>
 
         {/* Tier Section */}
-        <div className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Optional: Assign Approver Tier
-            </label>
-            <p className="text-xs text-muted-foreground">
-              Tiers are used strictly to check for authorization breaches. If not set, the approver can still approve payments, but tests may flag it. The approver must be authorized first.
-            </p>
-            <select
+        <div className="space-y-6 pt-2">
+          <Field>
+            <FieldLabel htmlFor="approver-tier">Optional: Assign Approver Tier</FieldLabel>
+            <Select
               value={selectedTier}
-              onChange={(e) => setSelectedTier(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-2"
+              onValueChange={setSelectedTier}
             >
-              <option value="0">Routine (Level 0)</option>
-              <option value="1">Manager (Level 1)</option>
-              <option value="2">Director (Level 2)</option>
-              <option value="3">Board (Level 3)</option>
-            </select>
-          </div>
+              <SelectTrigger id="approver-tier">
+                <SelectValue placeholder="Select a tier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Routine (Level 0)</SelectItem>
+                <SelectItem value="1">Manager (Level 1)</SelectItem>
+                <SelectItem value="2">Director (Level 2)</SelectItem>
+                <SelectItem value="3">Board (Level 3)</SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldDescription>
+              Tiers are used strictly to check for authorization breaches. If not set, the approver can still approve payments, but tests may flag it. The approver must be authorized first.
+            </FieldDescription>
+          </Field>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex gap-3 text-sm text-foreground/80">
             <ShieldAlert className="h-5 w-5 text-primary shrink-0 mt-0.5" />

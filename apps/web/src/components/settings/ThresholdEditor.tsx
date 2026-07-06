@@ -4,6 +4,8 @@ import * as React from "react";
 import { useState } from "react";
 import { Loader2, ShieldAlert, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupText } from "@/components/ui/input-group";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { toHex, type Abi } from "viem";
 import { sepolia } from "wagmi/chains";
@@ -107,7 +109,7 @@ export function ThresholdEditor({
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <FieldGroup className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <ThresholdInput
             id="manager"
             label="Manager Tier"
@@ -129,7 +131,7 @@ export function ThresholdEditor({
             value={boardThreshold}
             onChange={(e) => setBoardThreshold(e.target.value)}
           />
-        </div>
+        </FieldGroup>
 
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex gap-3 text-sm text-foreground/80">
           <ShieldAlert className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -182,26 +184,23 @@ function ThresholdInput({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">
-        {label}
-      </label>
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-          $
-        </span>
-        <input
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <InputGroup>
+        <InputGroupAddon align="inline-start">
+          <InputGroupText>$</InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput
           id={id}
           type="number"
           required
           min="1"
           value={value}
           onChange={onChange}
-          className="flex h-10 w-full rounded-md border border-input bg-background pl-7 pr-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="0"
+          className="font-mono"
         />
-      </div>
-      <p className="text-[13px] text-muted-foreground">{desc}</p>
-    </div>
+      </InputGroup>
+      <FieldDescription>{desc}</FieldDescription>
+    </Field>
   );
 }

@@ -4,8 +4,10 @@ import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePublicClient, useWalletClient, useChainId } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import { Loader2, Lock, Unlock, BarChart3, Users } from "lucide-react";
+import { Loader2, Lock, Unlock, BarChart3, Users, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { CATEGORY_LABELS } from "@/lib/audit-enums";
 import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
@@ -47,12 +49,13 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptDone, setDecryptDone] = useState(false);
   const [decryptError, setDecryptError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ── Category handles: direct eth_call with account= ───────────────────────
   // getCategoryTotal checks _canReadAnalytics(msg.sender). Multicall3 sets
   // msg.sender = 0x0 which fails the check. Direct readContract passes
   // account= in the eth_call so msg.sender = walletAddress inside the contract.
-  const { data: categoryHandles, isLoading: categoryLoading } = useQuery({
+  const { data: categoryHandles, isLoading: categoryLoading, refetch: refetchCategory } = useQuery({
     queryKey: ["analytics-category-handles", auditRegistryAddress, walletAddress],
     queryFn: async () => {
       if (!publicClient) return {} as HandleMap;
@@ -74,11 +77,12 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
       return map;
     },
     enabled: !!publicClient,
-    refetchInterval: 15_000,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
   // ── Recipients: query PaymentRecorded events ──────────────────────────────
-  const { data: recipients = [], isLoading: recipientsLoading } = useQuery({
+  const { data: recipients = [], isLoading: recipientsLoading, refetch: refetchRecipients } = useQuery({
     queryKey: ["analytics-recipients", auditRegistryAddress, deployedAtBlock.toString()],
     queryFn: async () => {
       if (!publicClient || !deployedAtBlock) return [];
@@ -98,12 +102,13 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
       ];
     },
     enabled: !!publicClient && !!deployedAtBlock,
-    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
   // ── Recipient handles: direct eth_call with account= ─────────────────────
   // getRecipientTotal also checks _canReadAnalytics() — same Multicall3 issue.
-  const { data: recipientHandles, isLoading: recipientHandlesLoading } = useQuery({
+  const { data: recipientHandles, isLoading: recipientHandlesLoading, refetch: refetchRecipientHandles } = useQuery({
     queryKey: ["analytics-recipient-handles", auditRegistryAddress, walletAddress, recipients.join(",")],
     queryFn: async () => {
       if (!publicClient || recipients.length === 0) return {} as HandleMap;
@@ -125,10 +130,25 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
       return map;
     },
     enabled: !!publicClient && recipients.length > 0,
-    refetchInterval: 15_000,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
-  const isLoading = categoryLoading || recipientsLoading || recipientHandlesLoading;
+  const isLoading = categoryLoading || recipientsLoading || recipientHandlesLoading || isRefreshing;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setDecryptDone(false);
+    setCategoryValues({});
+    setRecipientValues({});
+    setDecryptError(null);
+    await Promise.all([
+      refetchCategory(),
+      refetchRecipients(),
+      refetchRecipientHandles(),
+    ]);
+    setIsRefreshing(false);
+  };
 
   // ── Decrypt All ───────────────────────────────────────────────────────────
   const handleDecryptAll = async () => {
@@ -246,7 +266,7 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto w-full pb-12 space-y-10">
+    <div className="max-w-5xl mx-auto w-full pb-12 space-y-8">
       {/* Header */}
       <div className="flex items-start justify-between border-b border-border pb-6">
         <div className="flex flex-col gap-1">
@@ -255,21 +275,31 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
             Encrypted rollup totals across GL categories and recipients. Decrypt to reveal values.
           </p>
         </div>
-        <Button
-          onClick={handleDecryptAll}
-          disabled={isDecrypting || isLoading || !handlesReady || !walletClient}
-          className="gap-2 shrink-0"
-          variant={decryptDone ? "outline" : "default"}
-        >
-          {isDecrypting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : decryptDone ? (
-            <Unlock className="h-4 w-4" />
-          ) : (
-            <Lock className="h-4 w-4" />
-          )}
-          {isDecrypting ? "Decrypting…" : decryptDone ? "Decrypted" : "Decrypt All"}
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            onClick={handleRefresh}
+            disabled={isRefreshing || isDecrypting}
+            variant="outline"
+            size="icon"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            onClick={handleDecryptAll}
+            disabled={isDecrypting || isLoading || !handlesReady || !walletClient}
+            className="gap-2"
+            variant={decryptDone ? "outline" : "default"}
+          >
+            {isDecrypting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : decryptDone ? (
+              <Unlock className="h-4 w-4" />
+            ) : (
+              <Lock className="h-4 w-4" />
+            )}
+            {isDecrypting ? "Decrypting…" : decryptDone ? "Decrypted" : "Decrypt All"}
+          </Button>
+        </div>
       </div>
 
       {decryptError && (
@@ -280,108 +310,98 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
 
       {/* Category Rollups */}
       <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-base font-semibold">GL Category Totals</h3>
+        <div className="flex flex-col gap-1">
+          <h3 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <BarChart3 className="h-5 w-5 text-muted-foreground" />
+            GL Category Totals
+          </h3>
         </div>
-
+        
         {isLoading ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm py-8">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          <div className="flex items-center justify-center text-muted-foreground text-sm py-8">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
           </div>
         ) : (
-          <div className="space-y-3">
-            {categoryRows.map((cat) => (
-              <div key={cat.index} className="flex items-center gap-3">
-                <span className="w-40 text-sm text-muted-foreground shrink-0 truncate">
-                  {cat.label}
-                </span>
-                <div className="flex-1 h-8 bg-muted/30 rounded-lg overflow-hidden relative">
-                  {cat.value !== null ? (
-                    <div
-                      className="h-full bg-primary/60 rounded-lg transition-all duration-700 ease-out"
-                      style={{
-                        width: maxCategoryValue > 0n
-                          ? `${Number((cat.value * 100n) / maxCategoryValue)}%`
-                          : "0%",
-                      }}
-                    />
-                  ) : (
-                    // Indeterminate pattern while encrypted
-                    <div className="h-full bg-muted/50 rounded-lg" />
-                  )}
-                </div>
-                <span className="w-32 text-sm font-mono text-right shrink-0">
-                  {cat.value !== null ? (
-                    <span className="text-emerald-600">{formatUsdc(cat.value)}</span>
-                  ) : cat.hasHandle ? (
-                    <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
-                      <Lock className="h-3 w-3" /> Encrypted
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">No data</span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50%]">Category</TableHead>
+                <TableHead className="text-right">Total Spent</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {categoryRows.map((cat) => (
+                <TableRow key={cat.index}>
+                  <TableCell className="font-medium">{cat.label}</TableCell>
+                  <TableCell className="text-right">
+                    {cat.value !== null ? (
+                      <span className="font-mono text-emerald-600 font-medium">
+                        {formatUsdc(cat.value)}
+                      </span>
+                    ) : cat.hasHandle ? (
+                      <Badge variant="outline" className="text-muted-foreground font-normal">
+                        <Lock className="h-3 w-3 mr-1" /> Encrypted
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </section>
 
       {/* Recipient Concentration */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-base font-semibold">Recipient Concentration</h3>
-          <span className="text-xs text-muted-foreground">
-            — cumulative spend per recipient
-          </span>
+      <section className="space-y-4 pt-4 border-t border-border">
+        <div className="flex flex-col gap-1">
+          <h3 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <Users className="h-5 w-5 text-muted-foreground" />
+            Recipient Concentration
+          </h3>
+          <p className="text-sm text-muted-foreground">Cumulative spend per recipient.</p>
         </div>
 
         {recipientsLoading || recipientHandlesLoading ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm py-8">
-            <Loader2 className="h-4 w-4 animate-spin" /> Querying payment events…
+          <div className="flex items-center justify-center text-muted-foreground text-sm py-8">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Querying payment events…
           </div>
         ) : recipients.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4">No payments recorded yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {recipientRows.map((r) => (
-              <div key={r.address} className="flex items-center gap-3">
-                <span
-                  className="w-40 font-mono text-xs text-muted-foreground shrink-0 truncate"
-                  title={r.address}
-                >
-                  {formatAddress(r.address)}
-                </span>
-                <div className="flex-1 h-8 bg-muted/30 rounded-lg overflow-hidden">
-                  {r.value !== null ? (
-                    <div
-                      className="h-full bg-emerald-500/50 rounded-lg transition-all duration-700 ease-out"
-                      style={{
-                        width: maxRecipientValue > 0n
-                          ? `${Number((r.value * 100n) / maxRecipientValue)}%`
-                          : "0%",
-                      }}
-                    />
-                  ) : (
-                    <div className="h-full bg-muted/50 rounded-lg" />
-                  )}
-                </div>
-                <span className="w-32 text-sm font-mono text-right shrink-0">
-                  {r.value !== null ? (
-                    <span className="text-emerald-600">{formatUsdc(r.value)}</span>
-                  ) : r.hasHandle ? (
-                    <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
-                      <Lock className="h-3 w-3" /> Encrypted
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">—</span>
-                  )}
-                </span>
-              </div>
-            ))}
+          <div className="text-center text-sm text-muted-foreground py-8">
+            No payments recorded yet.
           </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50%]">Wallet Address</TableHead>
+                <TableHead className="text-right">Total Spent</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recipientRows.map((r) => (
+                <TableRow key={r.address}>
+                  <TableCell className="font-mono text-sm text-muted-foreground">
+                    {formatAddress(r.address)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r.value !== null ? (
+                      <span className="font-mono text-emerald-600 font-medium">
+                        {formatUsdc(r.value)}
+                      </span>
+                    ) : r.hasHandle ? (
+                      <Badge variant="outline" className="text-muted-foreground font-normal">
+                        <Lock className="h-3 w-3 mr-1" /> Encrypted
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </section>
     </div>

@@ -10,6 +10,9 @@ import { getFhevmInstance } from "@/lib/fhe";
 import { getCategoryOptions } from "@/lib/audit-enums";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TestConfiguratorProps {
   testId: number;
@@ -38,7 +41,7 @@ export function TestConfigurator({
   onConfigured,
 }: TestConfiguratorProps) {
   const { address } = useAccount();
-  const [threshold, setThreshold] = useState("1000");
+  const [threshold, setThreshold] = useState("");
   const [priority, setPriority] = useState<string>("2"); // 2 = Standard
   const [monitoringFrequency, setMonitoringFrequency] = useState("10");
   const [scope, setScope] = useState<string>("0"); // Default category 0
@@ -133,30 +136,33 @@ export function TestConfigurator({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Priority Level</label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="1">Monitoring (Periodic)</option>
-              <option value="2">Standard (Every Payment)</option>
-              <option value="3">Critical (High Severity)</option>
-            </select>
+            <Label>Priority Level</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select priority">
+                  {priority === "1" ? "Monitoring (Periodic)" : priority === "2" ? "Standard (Every Payment)" : priority === "3" ? "Critical (High Severity)" : ""}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Monitoring (Periodic)</SelectItem>
+                <SelectItem value="2">Standard (Every Payment)</SelectItem>
+                <SelectItem value="3">Critical (High Severity)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {priority === "1" && (
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Monitoring Frequency</label>
+              <Label>Monitoring Frequency</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Every</span>
-                <input
+                <Input
                   type="number"
                   required
                   min="1"
                   value={monitoringFrequency}
                   onChange={(e) => setMonitoringFrequency(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background pl-14 pr-16 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="pl-14 pr-20"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">payments</span>
               </div>
@@ -165,35 +171,38 @@ export function TestConfigurator({
 
           {testDefinition.requiresScope && (
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">GL Category Scope</label>
-              <select
-                value={scope}
-                onChange={(e) => setScope(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {CATEGORY_OPTIONS.map((opt, i) => (
-                  <option key={opt.value} value={i.toString()}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <Label>GL Category Scope</Label>
+              <Select value={scope} onValueChange={setScope}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category">
+                    {CATEGORY_OPTIONS[parseInt(scope)]?.label || "Select category"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((opt, i) => (
+                    <SelectItem key={opt.value} value={i.toString()}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-[13px] text-muted-foreground">Only payments in this category will be tested.</p>
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Threshold (USD)</label>
+            <Label>Threshold (cUSDC)</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <input
+              <Input
                 type="number"
                 required
                 min="1"
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-7 pr-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                placeholder="1000"
+                placeholder=""
+                className="pr-16"
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">cUSDC</span>
             </div>
             <p className="text-[13px] text-muted-foreground">This value will be FHE encrypted before leaving your browser.</p>
           </div>

@@ -77,35 +77,35 @@ export default function AuditorPortalPage() {
               {({ auditRegistryAddress, reviewRegistryAddress, accessLevel, walletAddress, deployedAtBlock }) => {
                 return (
                   <div className="flex flex-1 flex-col px-6 py-4">
-                    {activeView === "tests" && (
+                    <div className={activeView === "tests" ? "block" : "hidden"}>
                       <TestRules
                         reviewRegistryAddress={reviewRegistryAddress}
                         accessLevel={accessLevel}
                       />
-                    )}
+                    </div>
 
-                    {activeView === "findings" && (
+                    <div className={activeView === "findings" ? "block" : "hidden"}>
                       <Findings
                         auditRegistryAddress={auditRegistryAddress}
                         accessLevel={accessLevel}
                         walletAddress={walletAddress}
                       />
-                    )}
+                    </div>
 
-                    {activeView === "analytics" && (
+                    <div className={activeView === "analytics" ? "block" : "hidden"}>
                       <Analytics
                         auditRegistryAddress={auditRegistryAddress}
                         deployedAtBlock={deployedAtBlock}
                         walletAddress={walletAddress}
                       />
-                    )}
+                    </div>
 
-                    {activeView === "payments" && accessLevel >= 3 && (
+                    <div className={activeView === "payments" && accessLevel >= 3 ? "block" : "hidden"}>
                       <Payments
                         auditRegistryAddress={auditRegistryAddress}
                         walletAddress={walletAddress}
                       />
-                    )}
+                    </div>
                   </div>
                 );
               }}

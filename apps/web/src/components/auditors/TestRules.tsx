@@ -5,10 +5,11 @@ import { useAccount, useReadContracts } from "wagmi";
 import { sepolia } from "wagmi/chains";
 import type { Abi } from "viem";
 import {
-  Settings, ShieldCheck, Clock, CheckCircle2, Lock, ListFilter,
+  Settings, ShieldCheck, Clock, CheckCircle2, Lock, ListFilter, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import ReviewTestRegistryAbi from "@/lib/abis/ReviewTestRegistry.json";
 import { TestConfigurator } from "./TestConfigurator";
 import { CATEGORY_LABELS } from "@/lib/audit-enums";
@@ -22,53 +23,47 @@ const TEST_DEFINITIONS = [
   {
     id: 0,
     name: "Materiality",
-    description: "Flags any payment above the examination threshold. (Occurrence, Accuracy)",
+    description: "Flags any payment above the configured threshold.",
     configurable: true,
   },
   {
     id: 1,
     name: "Authorization Breach",
-    description: "Always active. Flags if the approver's authority tier was insufficient for the payment amount. (Authorization)",
+    description: "Flags if the approver's authority tier was insufficient for the payment amount.",
     configurable: false,
     builtin: true,
   },
   {
     id: 2,
     name: "Segregation of Duties",
-    description: "Always active. Flags if the same person initiated and approved a payment, or if the recipient approved their own payment. (Authorization)",
+    description: "Flags if the same person initiated and approved a payment, or if the recipient approved their own payment.",
     configurable: false,
     builtin: true,
   },
   {
     id: 3,
     name: "Missing Evidence",
-    description: "Flags payments above the threshold that lack a supporting invoice or document hash. (Occurrence)",
+    description: "Flags payments above the threshold that lack a supporting invoice or document hash.",
     configurable: true,
   },
   {
     id: 4,
     name: "Category Concentration",
-    description: "Flags when cumulative spend in a specific GL category exceeds the threshold. (Classification)",
+    description: "Flags when cumulative spend in a specific category exceeds the threshold.",
     configurable: true,
     requiresScope: true,
   },
   {
     id: 5,
     name: "Recipient Concentration",
-    description: "Flags when cumulative spend to a single recipient exceeds the threshold. (Completeness)",
+    description: "Flags when cumulative spend to a single recipient exceeds the threshold.",
     configurable: true,
-  },
-  {
-    id: 6,
-    name: "Structuring",
-    description: "Flags suspiciously split payments just below DoA thresholds. Launching in V2.",
-    configurable: false,
-    upcoming: true,
   },
 ];
 
 const PRIORITY_LABELS = ["None", "Monitoring", "Standard", "Critical"];
 const CONFIGURABLE_TESTS = TEST_DEFINITIONS.filter((t) => t.configurable);
+const INVARIANT_TESTS = TEST_DEFINITIONS.filter((t) => t.builtin);
 const CONFIGURABLE_TEST_IDS = CONFIGURABLE_TESTS.map((t) => t.id);
 
 type TestConfigResult = readonly [
@@ -116,56 +111,69 @@ export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
     return !!d && d[3] === true && Number(d[0]) !== 0;
   };
 
-  const getStatusBadge = (test: typeof TEST_DEFINITIONS[number]) => {
-    if (test.upcoming) {
-      return <Badge variant="outline" className="text-muted-foreground border-dashed">Coming Soon</Badge>;
-    }
+  const getStatusIndicator = (test: typeof TEST_DEFINITIONS[number]) => {
     if (test.builtin) {
       return (
-        <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-0">
-          <ShieldCheck className="h-3 w-3 mr-1" /> Always Active
-        </Badge>
+        <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+          <ShieldCheck className="h-3.5 w-3.5" /> Always Active
+        </span>
       );
     }
     if (isConfigured(test.id)) {
       return (
-        <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20">
-          <CheckCircle2 className="h-3 w-3 mr-1" /> Configured & Active
-        </Badge>
+        <span className="flex items-center gap-1.5 text-primary font-medium">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Active
+        </span>
       );
     }
     return (
-      <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-0">
-        <Clock className="h-3 w-3 mr-1" /> Inactive
-      </Badge>
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        <Clock className="h-3.5 w-3.5" /> Inactive
+      </span>
     );
   };
 
-  const getTestDetails = (testId: number, requiresScope?: boolean) => {
-    const d = testResultMap[testId];
-    if (!d || Number(d[0]) === 0 || !d[3]) return null;
+  const getTestDetails = (test: typeof TEST_DEFINITIONS[number]) => {
+    const d = testResultMap[test.id];
+    
+    if (!test.configurable) {
+      return (
+        <div className="flex flex-wrap items-center gap-4 pt-2 text-sm text-muted-foreground">
+          {getStatusIndicator(test)}
+        </div>
+      );
+    }
+
+    if (!d || Number(d[0]) === 0 || !d[3]) {
+      return (
+        <div className="flex flex-wrap items-center gap-4 pt-2 text-sm text-muted-foreground">
+          {getStatusIndicator(test)}
+        </div>
+      );
+    }
 
     const priority = PRIORITY_LABELS[Number(d[0])];
-    const scope = requiresScope ? CATEGORY_LABELS[Number(d[1])] ?? `Category ${d[1]}` : null;
+    const scope = test.requiresScope ? CATEGORY_LABELS[Number(d[1])] ?? `Category ${d[1]}` : null;
     const frequency = Number(d[0]) === 1 ? Number(d[2]) : null;
 
     return (
-      <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <CheckCircle2 className="h-3 w-3" /> Priority: {priority}
+      <div className="flex flex-wrap items-center gap-4 pt-2 text-sm text-muted-foreground">
+        {getStatusIndicator(test)}
+        <span className="flex items-center gap-1.5">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Priority: {priority}
         </span>
         {scope && (
-          <span className="flex items-center gap-1">
-            <ListFilter className="h-3 w-3" /> Scope: {scope}
+          <span className="flex items-center gap-1.5">
+            <ListFilter className="h-3.5 w-3.5" /> Scope: {scope}
           </span>
         )}
         {frequency && (
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" /> Every {frequency} payments
+          <span className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" /> Every {frequency} payments
           </span>
         )}
-        <span className="flex items-center gap-1 text-primary/70">
-          <Lock className="h-3 w-3" /> Threshold encrypted
+        <span className="flex items-center gap-1.5 text-primary/70">
+          <Lock className="h-3.5 w-3.5" /> Threshold encrypted
         </span>
       </div>
     );
@@ -181,44 +189,54 @@ export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
       </div>
 
       <div className="space-y-4">
-        {TEST_DEFINITIONS.map((test) => (
+        {CONFIGURABLE_TESTS.map((test) => (
           <div
             key={test.id}
-            className={`p-5 rounded-xl border bg-card flex flex-col md:flex-row md:items-start justify-between gap-4 transition-all hover:shadow-sm ${
-              test.upcoming ? "opacity-60 border-dashed" : "border-border"
-            }`}
+            className="p-6 rounded-xl border border-border bg-card flex flex-col sm:flex-row sm:items-start justify-between gap-6 transition-all hover:shadow-sm"
           >
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h3 className="text-base font-medium">{test.name}</h3>
-                {getStatusBadge(test)}
-              </div>
+            <div className="flex-1 space-y-1.5">
+              <h4 className="text-base font-semibold">{test.name}</h4>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 {test.description}
               </p>
-              {test.configurable && !test.upcoming && getTestDetails(test.id, test.requiresScope)}
+              {getTestDetails(test)}
             </div>
 
-            {test.configurable && !test.upcoming && (
-              <div className="flex flex-col items-end gap-1 shrink-0 md:mt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setConfiguringTest(test.id)}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  {isConfigured(test.id) ? "Edit" : "Configure"}
-                </Button>
-              </div>
-            )}
+            <div className="flex flex-col items-end shrink-0 sm:min-w-[140px] pt-1">
+              <Button
+                variant={isConfigured(test.id) ? "outline" : "default"}
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={() => setConfiguringTest(test.id)}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                {isConfigured(test.id) ? "Edit Config" : "Configure"}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
 
-            {test.upcoming && (
-              <div className="flex flex-col items-end gap-1 shrink-0 md:mt-1">
-                <Button variant="ghost" size="sm" disabled className="opacity-50">
-                  Coming Soon
-                </Button>
-              </div>
-            )}
+      <div className="pt-6 mt-8 space-y-4">
+        <Alert className="w-full bg-muted/30 border-muted-foreground/20">
+          <Info className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-muted-foreground leading-relaxed">
+            The following tests do not run at runtime. They run automatically when approvals are carried out.
+          </AlertDescription>
+        </Alert>
+        
+        {INVARIANT_TESTS.map((test) => (
+          <div
+            key={test.id}
+            className="p-6 rounded-xl border border-border bg-card flex flex-col sm:flex-row sm:items-start justify-between gap-6 transition-all"
+          >
+            <div className="flex-1 space-y-1.5">
+              <h4 className="text-base font-semibold">{test.name}</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {test.description}
+              </p>
+              {getTestDetails(test)}
+            </div>
           </div>
         ))}
       </div>

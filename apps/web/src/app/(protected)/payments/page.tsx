@@ -9,9 +9,9 @@ import {
 } from "@/components/ui/sidebar";
 import { PaymentForm } from "@/components/payment-form/PaymentForm";
 import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
-import { EmptyState } from "@/components/ui/empty-state";
 import { AuditOverview } from "@/components/audits/AuditOverview";
-import { ArrowLeftRight, ArrowRight, ExternalLink } from "lucide-react";
+import { TransactionHistory } from "@/components/transactions/TransactionHistory";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useReadContract } from "wagmi";
@@ -140,10 +140,9 @@ export default function Page() {
                 )}
 
                 {activeView === "transactions" && (
-                  <EmptyState
-                    icon={<ArrowLeftRight className="h-5 w-5" />}
-                    title="No transactions yet"
-                    description="Your onchain transaction history will appear here after your first payment."
+                  <TransactionHistory
+                    auditRegistryAddress={auditRegistryAddress}
+                    walletAddress={walletAddress}
                   />
                 )}
 
