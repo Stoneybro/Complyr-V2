@@ -11,7 +11,23 @@ import { PaymentForm } from "@/components/payment-form/PaymentForm";
 import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AuditOverview } from "@/components/audits/AuditOverview";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useReadContract } from "wagmi";
+import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
+import { useOnboardingState } from "@/hooks/useOnboardingState";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { SettingsView } from "@/components/settings/SettingsView";
 
@@ -24,8 +40,32 @@ const viewMeta: Record<AppView, { title: string; description: string }> = {
 };
 
 export default function Page() {
+  const router = useRouter();
   const [activeView, setActiveView] = useState<AppView>("payments");
   const [isDashboardReady, setIsDashboardReady] = useState(false);
+  const [showNoAuditorDialog, setShowNoAuditorDialog] = useState(false);
+
+  const { state } = useOnboardingState();
+  const auditRegistryAddress = state.phase === "ready" ? state.auditRegistryAddress : undefined;
+  const walletAddress = state.phase === "ready" ? state.walletAddress : undefined;
+
+  const { data: auditorCountData } = useReadContract({
+    address: auditRegistryAddress,
+    abi: AuditRegistryAbi,
+    functionName: "auditorCount",
+    query: {
+      enabled: !!auditRegistryAddress,
+    },
+  });
+
+  const handleAuditorNavigation = () => {
+    const count = Number(auditorCountData ?? 0);
+    if (count > 0 && walletAddress) {
+      window.open(`/auditors/${walletAddress}`, "_blank", "noopener,noreferrer");
+    } else {
+      setShowNoAuditorDialog(true);
+    }
+  };
 
   const handlePhaseChange = useCallback((isReady: boolean) => {
     setIsDashboardReady(isReady);
@@ -49,11 +89,32 @@ export default function Page() {
           <SidebarTrigger className="-ml-1" />
 
           <div className="flex flex-1 items-center justify-between">
-            <div>
-              <h1 className="font-semibold">
-                {isDashboardReady ? meta.title : ""}
-              </h1>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Business Workspace
+                </span>
+                {isDashboardReady && <span className="text-muted-foreground/40 font-light">/</span>}
+              </div>
+              {isDashboardReady && (
+                <h1 className="font-semibold text-lg tracking-tight text-foreground">
+                  {meta.title}
+                </h1>
+              )}
             </div>
+
+            {/* Right side Auditor link */}
+            {isDashboardReady && (
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={handleAuditorNavigation}
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+              >
+                Auditor Workspace
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </header>
 
@@ -66,12 +127,14 @@ export default function Page() {
                   <PaymentForm
                     walletAddress={walletAddress}
                     auditRegistryAddress={auditRegistryAddress}
+                    hasAuditor={Number(auditorCountData ?? 0) > 0}
+                    onNavigateToAudits={() => setActiveView("audits")}
                   />
                 )}
 
                 {activeView === "audits" && (
-                  <AuditOverview 
-                    auditRegistryAddress={auditRegistryAddress} 
+                  <AuditOverview
+                    auditRegistryAddress={auditRegistryAddress}
                     businessAddress={walletAddress}
                   />
                 )}
@@ -95,6 +158,28 @@ export default function Page() {
           </OnboardingShell>
         </div>
       </SidebarInset>
+
+      <AlertDialog open={showNoAuditorDialog} onOpenChange={setShowNoAuditorDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>No Auditors Configured</AlertDialogTitle>
+            <AlertDialogDescription>
+              You haven't added any auditors to your registry yet. The Auditor Workspace is a dedicated portal for your auditors to review payments. You must assign at least one auditor before accessing it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowNoAuditorDialog(false);
+                setActiveView("audits");
+              }}
+            >
+              Add Auditors
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   );
 }

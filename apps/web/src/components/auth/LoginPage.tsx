@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Lock, ShieldCheck, Cpu } from "lucide-react";
+import Image from "next/image";
 
 /**
  * Standalone Login Page.
@@ -12,9 +12,15 @@ import { Lock, ShieldCheck, Cpu } from "lucide-react";
  */
 export function LoginPage() {
   return (
-    <div className="max-w-[460px] flex flex-col items-center text-center">
-      <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-        <Lock className="h-8 w-8 text-primary" />
+    <div className="max-w-[460px] flex flex-col items-center text-center -mt-24">
+      <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/5">
+        <Image
+          src="/complyrlogo-light.svg"
+          alt="Complyr Logo"
+          width={60}
+          height={60}
+          className="h-12 w-auto"
+        />
       </div>
 
       {/* Headline */}
@@ -22,8 +28,7 @@ export function LoginPage() {
         Welcome back
       </h1>
       <p className="text-base text-muted-foreground leading-relaxed mb-10">
-        Complyr uses your wallet to sign transactions and attach encrypted audit
-        records to every payment. No account or password needed.
+        Connect your wallet to access Complyr.
       </p>
 
       {/* Custom RainbowKit connect button */}
@@ -80,22 +85,6 @@ export function LoginPage() {
           );
         }}
       </ConnectButton.Custom>
-
-      {/* Feature list */}
-      <div className="mt-12 space-y-4 border-t border-border pt-8 text-left w-full">
-        {[
-          { icon: ShieldCheck, text: "FHE-encrypted audit trail on every payment" },
-          { icon: Cpu, text: "Self-custodial smart wallet — no shared keys" },
-          { icon: Lock, text: "Payments cannot be recorded without your signature" },
-        ].map(({ icon: Icon, text }) => (
-          <div key={text} className="flex items-center gap-4 text-sm text-muted-foreground bg-muted/30 p-3 rounded-lg border border-border/50">
-            <div className="bg-background rounded p-1.5 border border-border/50 shadow-sm">
-              <Icon className="h-4 w-4 shrink-0 text-foreground/80" />
-            </div>
-            <span className="font-medium leading-tight">{text}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

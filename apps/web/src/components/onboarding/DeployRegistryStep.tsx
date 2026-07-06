@@ -8,6 +8,7 @@ import {
   useChainId,
 } from "wagmi";
 import { sepolia } from "wagmi/chains";
+import { toast } from "sonner";
 import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
 import { ComplyrFactoryAddress } from "@/lib/CA";
 
@@ -43,9 +44,19 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
     chainId: sepolia.id,
   });
 
+  const hasToasted = React.useRef(false);
+
   // Advance state once confirmed
   React.useEffect(() => {
-    if (isConfirmed) {
+    if (isConfirmed && !hasToasted.current) {
+      hasToasted.current = true;
+      toast.success("Workspace deployed successfully!", {
+        description: "Your smart contracts are live on Sepolia.",
+        action: txHash ? {
+          label: "View Tx",
+          onClick: () => window.open(`https://sepolia.etherscan.io/tx/${txHash}`, "_blank"),
+        } : undefined,
+      });
       const timer = setTimeout(onDeployed, 600);
       return () => clearTimeout(timer);
     }
@@ -69,56 +80,41 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
     : isConfirming
     ? "Confirming on Sepolia…"
     : isConfirmed
-    ? "Account deployed"
-    : "Deploy your account";
+    ? "Workspace created"
+    : "Create your workspace";
 
   return (
     <div className="max-w-[460px]">
-      {/* Icon */}
-      <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20">
-        {isConfirmed ? (
-          <CheckCircle2 className="h-5 w-5 text-primary animate-in zoom-in duration-300" />
-        ) : (
-          <Cpu className="h-5 w-5 text-primary" />
-        )}
-      </div>
-
       {/* Headline */}
       <h1 className="text-3xl font-semibold tracking-tight mb-4">{statusLabel}</h1>
       <p className="text-base text-muted-foreground leading-relaxed mb-10">
         {isConfirmed
-          ? "Your Complyr smart registry is live on Sepolia. Setting up authorization rules…"
-          : "Complyr deploys an isolated AuditRegistry and ReviewTestRegistry clone pair for your business. Ownership is transferred to you immediately — Complyr has zero admin rights after this transaction."}
+          ? "Your Complyr smart registries are live on Sepolia. Moving to security settings…"
+          : "We are deploying an isolated pair of smart contracts for your business. Ownership is transferred to you immediately, ensuring Complyr has zero admin rights."}
       </p>
 
       {/* What gets deployed — idle only */}
       {!isDeploying && !isConfirmed && !error && (
         <div className="mb-8 space-y-2.5">
           {[
-            "AuditRegistry — encrypted payment records + findings",
-            "ReviewTestRegistry — automated audit test engine",
-            "Ownership transferred to your wallet — Complyr has zero admin rights",
+            "Deploy dedicated smart contracts for encrypted payments and compliance tests",
+            "Transfer full contract ownership directly to your wallet",
           ].map((item) => (
             <div key={item} className="flex items-start gap-3 text-base">
               <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <span className="text-muted-foreground">{item}</span>
             </div>
           ))}
+          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4 flex gap-3 text-sm text-foreground/80">
+            <span className="text-xl">🎁</span>
+            <div>
+              <strong className="block mb-0.5 text-primary">Demo Bonus</strong>
+              Your workspace will be automatically funded with 5,000 cUSDC for testing.
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Tx hash link — shown while confirming or confirmed */}
-      {txHash && (
-        <a
-          href={`https://sepolia.etherscan.io/tx/${txHash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mb-6 flex items-center gap-2 text-xs text-primary hover:underline font-mono"
-        >
-          {txHash.slice(0, 10)}…{txHash.slice(-8)}
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
 
       {/* Error */}
       {error && (
@@ -148,13 +144,6 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
             <>Deploy Account <ArrowRight className="h-4 w-4" /></>
           )}
         </button>
-      )}
-
-      {/* Wallet hint */}
-      {!isDeploying && !isConfirmed && (
-        <p className="mt-6 text-xs text-muted-foreground font-mono">
-          Registering {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)} on Sepolia
-        </p>
       )}
     </div>
   );

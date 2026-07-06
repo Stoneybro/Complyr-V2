@@ -65,6 +65,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
     }
 
     setIsEncrypting(true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     try {
       const fhevm = await getFhevmInstance();
       const input = fhevm.createEncryptedInput(auditRegistryAddress, approverAddress);

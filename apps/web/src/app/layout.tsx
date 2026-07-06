@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Complyr — Private Audit Infrastructure for Onchain Payments",
   description: "Complyr attaches encrypted audit records to every onchain payment. Auditors verify payments against private audit tests without decrypting the data.",
+  icons: {
+    icon: "/complyrlogo.ico",
+  },
 };
 
 export default function RootLayout({

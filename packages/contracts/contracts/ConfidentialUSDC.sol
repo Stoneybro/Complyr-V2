@@ -129,20 +129,23 @@ contract ConfidentialUSDC is ZamaEthereumConfig {
     function _transfer(address from, address to, euint64 amount) private returns (euint64) {
         if (to == address(0)) revert InvalidAddress();
 
-        _balances[from] = FHE.sub(_balances[from], amount);
-        _balances[to] = FHE.add(_balances[to], amount);
+        ebool isSufficient = FHE.le(amount, _balances[from]);
+        euint64 actualAmount = FHE.select(isSufficient, amount, FHE.asEuint64(0));
+
+        _balances[from] = FHE.sub(_balances[from], actualAmount);
+        _balances[to] = FHE.add(_balances[to], actualAmount);
 
         FHE.allowThis(_balances[from]);
         FHE.allowThis(_balances[to]);
         FHE.allow(_balances[from], from);
         FHE.allow(_balances[to], to);
-        FHE.allow(amount, from);
-        FHE.allow(amount, to);
-        FHE.allowThis(amount);
-        FHE.allowTransient(amount, to);
+        FHE.allow(actualAmount, from);
+        FHE.allow(actualAmount, to);
+        FHE.allowThis(actualAmount);
+        FHE.allowTransient(actualAmount, to);
 
-        emit ConfidentialTransfer(from, to, amount);
-        return amount;
+        emit ConfidentialTransfer(from, to, actualAmount);
+        return actualAmount;
     }
 
     function _transferAndCall(address from, address to, euint64 amount, bytes memory data) private returns (euint64) {

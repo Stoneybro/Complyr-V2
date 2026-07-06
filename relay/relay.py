@@ -106,6 +106,67 @@ def parse_kms_stdout(output: str) -> bool:
             return match.group(1) == "true"
     raise ValueError(f"Unexpected KMS output: {output!r}")
 
+def send_finding_tx(w3, relay_account, registry_contract, evt, get_next_nonce, log):
+    """
+    get_next_nonce: a zero-arg callable that returns the next nonce to use
+    and advances an in-memory counter — see the closure set up below.
+    Returns True on confirmed success, False on failure (caller keeps
+    poll_had_retryable_failure = True in that case, same as before).
+    """
+    MAX_ATTEMPTS = 3
+    nonce = get_next_nonce()
+
+    base_fee = w3.eth.get_block("pending")["baseFeePerGas"]
+    # Priority fee with headroom; bump further on each retry attempt.
+    priority_fee = w3.to_wei(2, "gwei")
+
+    attempt = 0
+    while attempt < MAX_ATTEMPTS:
+        attempt += 1
+        # Escalate both base-fee headroom and priority fee on each retry so a
+        # resend is a valid fee-bump replacement, not just a duplicate.
+        max_priority = priority_fee * attempt
+        max_fee = base_fee * 2 * attempt + max_priority
+
+        try:
+            tx = registry_contract.functions.recordFindingIfTriggeredFor(
+                evt["auditor"],
+                evt["paymentId"],
+                evt["testType"],
+                True,
+            ).build_transaction({
+                "from": relay_account.address,
+                "nonce": nonce,
+                "gas": 300_000,
+                "maxFeePerGas": max_fee,
+                "maxPriorityFeePerGas": max_priority,
+            })
+            signed = relay_account.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            log("INFO", f"Sent tx {tx_hash.hex()} (nonce={nonce}, attempt={attempt}, maxFeePerGas={max_fee})")
+
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+
+            if receipt["status"] == 1:
+                log("INFO", f"Finding created - auditor={evt['auditor']} paymentId={evt['paymentId']} "
+                             f"testType={evt['testType']} tx={tx_hash.hex()}")
+                return True
+            else:
+                log("WARNING", f"Tx reverted - paymentId={evt['paymentId']} (auditor may be deregistered)")
+                return False  # revert is not a gas problem — don't retry with more gas
+
+        except Exception as e:
+            err_str = str(e)
+            if "TimeExhausted" in err_str or "not in the chain" in err_str:
+                log("WARNING", f"Tx for paymentId={evt['paymentId']} not mined within timeout "
+                                f"(attempt {attempt}/{MAX_ATTEMPTS}). Retrying at same nonce with higher gas.")
+                continue  # same nonce, higher fee next loop iteration = replacement
+            log("ERROR", f"[sendTx failed] {evt['key']}: {type(e).__name__}: {e}")
+            return False
+
+    log("ERROR", f"[sendTx failed] {evt['key']}: exhausted {MAX_ATTEMPTS} attempts, still not mined.")
+    return False
+
 # ─── Main relay loop ──────────────────────────────────────────────────────────
 
 def run_relay():
@@ -250,6 +311,14 @@ def run_relay():
                 log("INFO", f"{len(events_to_process)} new event(s) to process")
 
             # --- Step 4: Send transactions ---
+            if events_to_process:
+                pending_nonce = w3.eth.get_transaction_count(relay_account.address, "pending")
+                def get_next_nonce():
+                    nonlocal pending_nonce
+                    n = pending_nonce
+                    pending_nonce += 1
+                    return n
+
             for evt in events_to_process:
                 log("INFO", f"Processing: auditor={evt['auditor']} paymentId={evt['paymentId']} testType={evt['testType']}")
                 registry_contract = w3.eth.contract(
@@ -292,31 +361,10 @@ def run_relay():
                     state["processed"].append(evt["key"])
                     continue
 
-                try:
-                    nonce = w3.eth.get_transaction_count(relay_account.address)
-                    tx = registry_contract.functions.recordFindingIfTriggeredFor(
-                        evt["auditor"],
-                        evt["paymentId"],
-                        evt["testType"],
-                        is_triggered,
-                    ).build_transaction({
-                        "from":  relay_account.address,
-                        "nonce": nonce,
-                        "gas":   300_000,
-                        "gasPrice": w3.eth.gas_price,
-                    })
-                    signed = relay_account.sign_transaction(tx)
-                    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-                    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-
-                    if receipt["status"] == 1:
-                        log("INFO", f"Finding created - auditor={evt['auditor']} paymentId={evt['paymentId']} testType={evt['testType']} tx={tx_hash.hex()}")
-                        state["processed"].append(evt["key"])
-                    else:
-                        log("WARNING", f"Tx reverted - paymentId={evt['paymentId']} (auditor may be deregistered)")
-                        poll_had_retryable_failure = True
-                except Exception as e:
-                    log("ERROR", f"[sendTx failed] {evt['key']}: {type(e).__name__}: {e}")
+                ok = send_finding_tx(w3, relay_account, registry_contract, evt, get_next_nonce, log)
+                if ok:
+                    state["processed"].append(evt["key"])
+                else:
                     poll_had_retryable_failure = True
 
             if poll_had_retryable_failure:

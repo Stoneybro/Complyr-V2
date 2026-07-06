@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { toHex, type Abi } from "viem";
 import { sepolia } from "wagmi/chains";
+import { toast } from "sonner";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { getFhevmInstance } from "@/lib/fhe";
 
@@ -47,9 +48,19 @@ export function InitializeDefaultsStep({
       chainId: sepolia.id,
     });
 
+  const hasToasted = React.useRef(false);
+
   // Advance state once confirmed
   React.useEffect(() => {
-    if (isConfirmed) {
+    if (isConfirmed && !hasToasted.current) {
+      hasToasted.current = true;
+      toast.success("Defaults initialized successfully!", {
+        description: "Your limits are encrypted and live on Sepolia.",
+        action: txHash ? {
+          label: "View Tx",
+          onClick: () => window.open(`https://sepolia.etherscan.io/tx/${txHash}`, "_blank"),
+        } : undefined,
+      });
       const timer = setTimeout(onConfigured, 600);
       return () => clearTimeout(timer);
     }
@@ -60,6 +71,10 @@ export function InitializeDefaultsStep({
     reset();
 
     setIsEncrypting(true);
+
+    // Yield to event loop so React can paint the loading state
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     try {
       const fhevm = await getFhevmInstance();
 
@@ -102,10 +117,10 @@ export function InitializeDefaultsStep({
   return (
     <div className="max-w-[460px]">
       <h1 className="text-3xl font-semibold tracking-tight mb-4">
-        Account deployed
+        Demo Configuration
       </h1>
       <p className="text-base text-muted-foreground leading-relaxed mb-6">
-        Your smart registry is live! We will now initialize it with default authorization thresholds for your delegation of authority rules.
+        We will now initialize your workspace with standard threshold rules based on your 5,000 cUSDC demo balance. These values are encrypted via FHE before being stored on-chain.
       </p>
 
       <div className="space-y-4 mb-8">
@@ -130,24 +145,10 @@ export function InitializeDefaultsStep({
             <p>
               You can change these thresholds and assign approver tiers later in the <strong>Settings</strong> page.
             </p>
-            <p>
-              <strong>Note:</strong> You must also add your external auditors in the Auditor page. Without adding auditors, your payments will not be monitored.
-            </p>
           </div>
         </div>
       </div>
 
-      {txHash && (
-        <a
-          href={`https://sepolia.etherscan.io/tx/${txHash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mb-6 flex items-center gap-2 text-xs text-primary hover:underline font-mono"
-        >
-          {txHash.slice(0, 10)}…{txHash.slice(-8)}
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
 
       {error && (
         <p className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

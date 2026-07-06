@@ -58,8 +58,11 @@ export function useSingleTransfer() {
         onStatusUpdate,
       } = data;
 
+      // Yield to event loop to allow React to paint the loading state
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // ── Step 1: FHE encrypt amount + category client-side ──────────────────
-      onStatusUpdate?.("Encrypting with Zama FHE…");
+      onStatusUpdate?.("Encrypting...");
 
       const fhevm = await getFhevmInstance();
       const input = fhevm.createEncryptedInput(

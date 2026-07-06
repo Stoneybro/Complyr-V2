@@ -8,6 +8,7 @@ import {
   LogOut,
   FileSearchCorner,
   Loader2,
+  RotateCw,
 } from "lucide-react";
 import { useDisconnect, useAccount, useChainId } from "wagmi";
 import Image from "next/image";
@@ -102,7 +103,9 @@ export function AppSidebar({
   const {
     formatted: formattedBalance,
     isLoading: isBalanceLoading,
+    isFetching: isBalanceFetching,
     isUnlocking,
+    invalidate,
   } = useConfidentialBalance();
 
   const symbol = "cUSDC";
@@ -160,14 +163,32 @@ export function AppSidebar({
                   <div className="flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-sm group-data-[collapsible=icon]:hidden">
                     {/* Top segment: Balance */}
                     <div className="flex flex-col px-4 py-3 bg-muted/20">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Balance
-                      </span>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                          Balance
+                        </span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => invalidate()}
+                                disabled={isBalanceFetching || isUnlocking}
+                                className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                              >
+                                <RotateCw className={`h-3.5 w-3.5 ${isBalanceFetching || isUnlocking ? 'animate-spin' : ''}`} />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <p className="text-xs">Refresh Balance</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <div className="flex items-baseline gap-1.5">
                         {isUnlocking ? (
                           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Unlocking…
+                            Decrypting...
                           </span>
                         ) : isBalanceLoading ? (
                           <span className="text-2xl font-semibold tracking-tight text-muted-foreground animate-pulse">

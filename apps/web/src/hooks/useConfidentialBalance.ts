@@ -51,6 +51,8 @@ export interface ConfidentialBalanceResult {
   raw: bigint | null;
   /** True while either query is fetching for the first time */
   isLoading: boolean;
+  /** True when any query is actively refetching */
+  isFetching: boolean;
   /** True specifically while the EIP-712 signing prompt is in flight */
   isUnlocking: boolean;
   /** Error from either query */
@@ -70,7 +72,9 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
   const {
     data: encHandle,
     isLoading: isHandleLoading,
+    isFetching: isHandleFetching,
     error: handleError,
+    refetch: refetchHandle,
   } = useReadContract({
     address: ConfidentialUSDCAddress as `0x${string}`,
     abi: ConfidentialUSDCAbi,
@@ -96,8 +100,13 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
   } = useQuery({
     queryKey: ["cusdc-balance", chainId, address, handleKey],
     queryFn: async (): Promise<bigint> => {
-      if (!address || !walletClient || !encHandle) {
+      if (!address || !walletClient || encHandle == null) {
         throw new Error("Missing prerequisites for decryption");
+      }
+
+      // If the contract returns 0n (uninitialized balance mapping), the balance is simply 0.
+      if (encHandle === 0n) {
+        return 0n;
       }
 
       const fhevm = await getFhevmInstance();
@@ -135,18 +144,20 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
 
       return BigInt(value as bigint | string);
     },
-    enabled: !!address && !!walletClient && !!encHandle && handleKey !== null,
+    enabled: !!address && !!walletClient && encHandle != null && handleKey !== null,
     staleTime: Infinity,
     retry: 1,
   });
 
   const invalidate = () => {
+    refetchHandle();
     queryClient.invalidateQueries({
       queryKey: ["cusdc-balance", chainId, address],
     });
   };
 
   const isLoading = isHandleLoading || isDecryptLoading;
+  const isFetching = isHandleFetching || isDecryptFetching;
   // isUnlocking = decrypt query is actively fetching but we have no cached result yet
   const isUnlocking = isDecryptFetching && decryptedBalance === undefined;
   const error = (handleError || decryptError) as Error | null;
@@ -163,6 +174,7 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
     formatted,
     raw: decryptedBalance ?? null,
     isLoading,
+    isFetching,
     isUnlocking,
     error,
     invalidate,

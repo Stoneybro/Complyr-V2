@@ -73,7 +73,11 @@ export async function getDecryptSession(
   const cached = sessionStorage.getItem(key);
   if (cached) {
     try {
-      return JSON.parse(cached) as DecryptSession;
+      const parsed = JSON.parse(cached) as DecryptSession;
+      // Ensure the parsed session is a valid object and contains the required signature
+      if (parsed && typeof parsed === 'object' && parsed.signature) {
+        return parsed;
+      }
     } catch {
       // Corrupted cache — fall through to re-create
       sessionStorage.removeItem(key);

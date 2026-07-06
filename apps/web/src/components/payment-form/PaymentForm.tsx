@@ -11,24 +11,26 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Info, FileText } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldGroup, Field, FieldLabel, FieldDescription } from "@/components/ui/field";
+import { InputGroup, InputGroupInput, InputGroupText, InputGroupAddon } from "@/components/ui/input-group";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Loader2, Info, ArrowRight, X } from "lucide-react";
 import { useSingleTransfer } from "@/hooks/payments/useSingleTransfer";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useConfidentialBalance } from "@/hooks/useConfidentialBalance";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getCategoryOptions } from "@/lib/audit-enums";
-import { useQuery } from "@tanstack/react-query";
-import { fetchWalletBalance } from "@/utils/helper";
+import { keccak256, toHex } from "viem";
 
-// GL category options from V2 contract
 const CATEGORY_OPTIONS = getCategoryOptions();
 
-// Per-recipient data matching ExternalAuditFields in AuditRegistry.sol
 type RecipientData = {
     address: string;
     amount: string;
-    category: string;        // GL Category (OPEX, CAPEX, etc.)
+    category: string;
+    invoiceHash?: `0x${string}`;
+    poHash?: `0x${string}`;
 };
 
 const recipientSchema = z.object({
@@ -46,50 +48,80 @@ const recipientSchema = z.object({
 interface PaymentFormProps {
     walletAddress?: `0x${string}`;
     auditRegistryAddress?: `0x${string}`;
+    hasAuditor?: boolean;
+    onNavigateToAudits?: () => void;
 }
 
 const emptyRecipient = (): RecipientData => ({ address: "", amount: "", category: "" });
 
-export function PaymentForm({ walletAddress, auditRegistryAddress }: PaymentFormProps) {
-    // Fetch wallet balance
-    const { data: wallet } = useQuery({
-        queryKey: ["walletBalance", walletAddress],
-        queryFn: () => fetchWalletBalance(walletAddress as `0x${string}`),
-        enabled: !!walletAddress,
-    });
-    const activeBalance = wallet?.availableUsdcBalance;
-
-    // Single payment state — fields matching ExternalAuditFields
+export function PaymentForm({ 
+    walletAddress, 
+    auditRegistryAddress, 
+    hasAuditor = true, 
+    onNavigateToAudits 
+}: PaymentFormProps) {
     const [single, setSingle] = useState<RecipientData>(emptyRecipient());
-
-    // Approval flag (maps to AuditRegistry.approvePayment segregation-of-duties workflow)
-    const [requiresApproval, setRequiresApproval] = useState(false);
-
     const [transactionStatus, setTransactionStatus] = useState("");
+    const [dismissedAlert, setDismissedAlert] = useState(false);
+    const [errors, setErrors] = useState<Partial<Record<keyof RecipientData, string>>>({});
 
     const singleMutation = useSingleTransfer();
-
     const isProcessing = singleMutation.isPending;
+    
+    const { raw, formatted } = useConfidentialBalance();
+    const amountVal = parseFloat(single.amount);
+    let amountRaw = 0n;
+    if (!isNaN(amountVal) && amountVal > 0) {
+        amountRaw = BigInt(Math.round(amountVal * 1_000_000));
+    }
+    const isInsufficient = raw !== null && amountRaw > raw;
 
     React.useEffect(() => {
         if (!isProcessing && transactionStatus) {
-            const t = setTimeout(() => setTransactionStatus(""), 2000);
+            const t = setTimeout(() => setTransactionStatus(""), 3000);
             return () => clearTimeout(t);
         }
     }, [isProcessing, transactionStatus]);
 
-    const validate = (recipients: RecipientData[]) => {
+    const validate = (data: RecipientData) => {
         try {
-            z.array(recipientSchema).parse(recipients);
+            recipientSchema.parse(data);
+            setErrors({});
             return true;
         } catch (err) {
             if (err instanceof z.ZodError) {
-                toast.error(err.issues[0].message);
-            } else {
-                toast.error("Validation failed");
+                const newErrors: Record<string, string> = {};
+                err.errors.forEach((e) => {
+                    if (e.path[0]) newErrors[e.path[0].toString()] = e.message;
+                });
+                setErrors(newErrors);
             }
             setTransactionStatus("");
             return false;
+        }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: "invoice" | "po") => {
+        const file = e.target.files?.[0];
+        if (!file) {
+            setSingle((prev) => ({ ...prev, [type === "invoice" ? "invoiceHash" : "poHash"]: undefined }));
+            return;
+        }
+        
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const hash = keccak256(toHex(bytes));
+            
+            setSingle((prev) => ({ 
+                ...prev, 
+                [type === "invoice" ? "invoiceHash" : "poHash"]: hash 
+            }));
+            
+            toast.success(`${type === "invoice" ? "Invoice" : "Purchase Order"} hashed successfully`);
+        } catch (err) {
+            console.error("Hashing error", err);
+            toast.error(`Failed to process ${type}`);
         }
     };
 
@@ -97,104 +129,132 @@ export function PaymentForm({ walletAddress, auditRegistryAddress }: PaymentForm
         e.preventDefault();
         setTransactionStatus("Initializing...");
 
-        try {
-            if (!single.address || !single.amount) {
-                toast.error("Please fill in recipient address and amount");
-                setTransactionStatus("");
-                return;
-            }
-            if (!validate([single])) return;
+        if (!validate(single)) return;
+        if (isInsufficient) return;
 
+        try {
             await singleMutation.mutateAsync({
                 to: single.address as `0x${string}`,
                 amount: single.amount,
                 category: single.category,
+                invoiceHash: single.invoiceHash,
+                poHash: single.poHash,
                 auditRegistryAddress: auditRegistryAddress!,
                 walletAddress: walletAddress!,
                 onStatusUpdate: setTransactionStatus,
             });
 
+            setTransactionStatus("Complete");
             setSingle(emptyRecipient());
+            setErrors({});
+            toast.success("Payment submitted successfully");
+            
+            // Reset file inputs visually
+            const form = e.target as HTMLFormElement;
+            form.reset();
         } catch (error) {
             console.error("Payment error:", error);
             setTransactionStatus("Failed");
+            toast.error("Payment failed. Please try again.");
         }
     };
 
     return (
-        <div className="max-w-3xl mx-auto w-full pb-12">
-            <form onSubmit={handleSubmit} className="space-y-10">
-                {/* ── Single Payment ── */}
-                <div className="space-y-10 outline-none mt-0">
-                    {/* Section 1: Transfer Details */}
-                    <div className="space-y-3">
-                        <div>
-                            <h3 className="text-lg font-medium">Transfer Details</h3>
-                            <p className="text-sm text-muted-foreground">Enter the recipient address and amount to transfer.</p>
-                        </div>
-                        <Card className="overflow-hidden">
-                            <CardContent className="space-y-6 p-6">
-                                <div className="grid sm:grid-cols-[1fr_160px] gap-4 items-start">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="single-recipient">Recipient Address</Label>
-                                        <Input
-                                            id="single-recipient"
-                                            placeholder="0x..."
-                                            value={single.address}
-                                            onChange={(e) =>
-                                                setSingle((p) => ({ ...p, address: e.target.value }))
-                                            }
-                                            className="font-mono"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="single-amount">Amount</Label>
-                                        <div className="relative">
-                                            <Input
-                                                id="single-amount"
-                                                type="number"
-                                                step="0.01"
-                                                placeholder="0.00"
-                                                value={single.amount}
-                                                onChange={(e) =>
-                                                    setSingle((p) => ({ ...p, amount: e.target.value }))
-                                                }
-                                                className="pr-12"
-                                            />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                                                USDC
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                            <div className="flex items-center justify-between p-4 bg-muted/40 border-t border-border">
-                                <span className="text-sm text-muted-foreground">Available Balance</span>
-                                <span className="text-sm font-medium">{activeBalance ? Number(activeBalance).toFixed(4) : "0.00"} USDC</span>
-                            </div>
-                        </Card>
-                    </div>
+        <div className="max-w-2xl mx-auto w-full pb-12 space-y-4">
+            {!hasAuditor && !dismissedAlert && (
+                <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>No auditor assigned</AlertTitle>
+                    <AlertDescription className="text-wrap">
+                        You haven't authorized an external auditor yet. Check out the Audits page to add an auditor and enable private audits of your encrypted payment records.
+                    </AlertDescription>
+                    <AlertAction>
+                        <Button 
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDismissedAlert(true)}
+                            className="size-6 text-muted-foreground hover:text-foreground focus:outline-none focus:ring-0"
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </AlertAction>
+                </Alert>
+            )}
 
-                    {/* Section 2: Audit Configuration */}
-                    <div className="space-y-3">
-                        <div>
-                            <h3 className="text-lg font-medium">Audit Configuration</h3>
-                            <p className="text-sm text-muted-foreground">Securely attach GL categories and evidence to the transaction onchain.</p>
-                        </div>
-                        <Card className="overflow-hidden">
-                            <CardContent className="space-y-6 p-6">
-                                <div className="space-y-2">
-                                    <Label htmlFor="single-category">
-                                        GL Category <span className="text-muted-foreground font-normal ml-1">(Encrypted)</span>
-                                    </Label>
+            <form onSubmit={handleSubmit}>
+                <Card className="shadow-sm">
+                    <CardHeader className="px-6 pt-4 pb-4">
+                        <CardTitle className="text-xl">Create Payment</CardTitle>
+                        <CardDescription>
+                            Send a secure, FHE-encrypted payment with compliance tracking.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-6 py-6 space-y-6">
+                        <FieldGroup>
+                            {/* Recipient */}
+                            <Field data-invalid={!!errors.address ? "" : undefined}>
+                                <FieldLabel htmlFor="single-recipient">Recipient Address</FieldLabel>
+                                <Input
+                                    id="single-recipient"
+                                    placeholder="0x..."
+                                    value={single.address}
+                                    onChange={(e) => {
+                                        setSingle((p) => ({ ...p, address: e.target.value }));
+                                        if (errors.address) setErrors((p) => ({ ...p, address: undefined }));
+                                    }}
+                                    className="font-mono"
+                                    aria-invalid={!!errors.address ? "true" : undefined}
+                                />
+                                {errors.address && <FieldDescription className="text-destructive">{errors.address}</FieldDescription>}
+                            </Field>
+
+                            {/* Amount & Category */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <Field data-invalid={!!errors.amount ? "" : undefined}>
+                                    <FieldLabel htmlFor="single-amount">Amount</FieldLabel>
+                                    <InputGroup>
+                                        <InputGroupInput
+                                            id="single-amount"
+                                            type="number"
+                                            step="0.000001"
+                                            min="0"
+                                            placeholder="0.00"
+                                            value={single.amount}
+                                            onChange={(e) => {
+                                                setSingle((p) => ({ ...p, amount: e.target.value }));
+                                                if (errors.amount) setErrors((p) => ({ ...p, amount: undefined }));
+                                            }}
+                                            aria-invalid={!!errors.amount ? "true" : undefined}
+                                        />
+                                        <InputGroupAddon align="inline-end">
+                                            <InputGroupText>USDC</InputGroupText>
+                                        </InputGroupAddon>
+                                    </InputGroup>
+                                    {errors.amount ? (
+                                        <FieldDescription className="text-destructive">{errors.amount}</FieldDescription>
+                                    ) : isInsufficient ? (
+                                        <FieldDescription className="text-destructive">
+                                            Insufficient balance (Current: {formatted} USDC)
+                                        </FieldDescription>
+                                    ) : null}
+                                </Field>
+
+                                <Field data-invalid={!!errors.category ? "" : undefined}>
+                                    <FieldLabel htmlFor="single-category">Category (GL)</FieldLabel>
                                     <Select
                                         value={single.category || ""}
-                                        onValueChange={(v) =>
-                                            setSingle((p) => ({ ...p, category: v ?? "" }))
-                                        }
+                                        onValueChange={(v) => {
+                                            setSingle((p) => ({ ...p, category: v ?? "" }));
+                                            if (errors.category) setErrors((p) => ({ ...p, category: undefined }));
+                                        }}
                                     >
-                                        <SelectTrigger id="single-category" className="w-full sm:w-[300px]">
-                                            <SelectValue placeholder="Select a category..." />
+                                        <SelectTrigger 
+                                            id="single-category" 
+                                            className="w-full"
+                                            aria-invalid={!!errors.category ? "true" : undefined}
+                                        >
+                                            <SelectValue placeholder="Select..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {CATEGORY_OPTIONS.map((c) => (
@@ -204,89 +264,68 @@ export function PaymentForm({ walletAddress, auditRegistryAddress }: PaymentForm
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                </div>
+                                    {errors.category && <FieldDescription className="text-destructive">{errors.category}</FieldDescription>}
+                                </Field>
+                            </div>
 
-                                <div className="grid sm:grid-cols-2 gap-4 pt-2">
-                                    <div className="space-y-2">
-                                        <Label className="flex items-center gap-1.5 text-muted-foreground">
-                                            <FileText className="h-3.5 w-3.5" /> Invoice (Optional)
-                                        </Label>
+                            {/* Documents */}
+                            <div className="pt-2">
+                                <h3 className="text-sm font-medium mb-4">Supporting Documents <span className="text-muted-foreground font-normal">(Optional)</span></h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <Field>
+                                        <FieldLabel className="text-xs text-muted-foreground">Invoice</FieldLabel>
                                         <Input
                                             type="file"
-                                            className="text-sm text-muted-foreground file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer h-10"
+                                            onChange={(e) => handleFileChange(e, "invoice")}
+                                            className="h-9 text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80 cursor-pointer"
                                         />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="flex items-center gap-1.5 text-muted-foreground">
-                                            <FileText className="h-3.5 w-3.5" /> Purchase Order (Optional)
-                                        </Label>
+                                        {single.invoiceHash && (
+                                            <p className="text-[10px] text-muted-foreground font-mono truncate mt-1">
+                                                Hash: {single.invoiceHash}
+                                            </p>
+                                        )}
+                                    </Field>
+                                    <Field>
+                                        <FieldLabel className="text-xs text-muted-foreground">Purchase Order</FieldLabel>
                                         <Input
                                             type="file"
-                                            className="text-sm text-muted-foreground file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer h-10"
+                                            onChange={(e) => handleFileChange(e, "po")}
+                                            className="h-9 text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80 cursor-pointer"
                                         />
-                                    </div>
+                                        {single.poHash && (
+                                            <p className="text-[10px] text-muted-foreground font-mono truncate mt-1">
+                                                Hash: {single.poHash}
+                                            </p>
+                                        )}
+                                    </Field>
                                 </div>
-                            </CardContent>
-                            <div className="flex items-start gap-3 p-4 bg-muted/40 border-t border-border text-sm text-muted-foreground">
-                                <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary/70" />
-                                <p>GL categories are <strong className="font-medium text-foreground">FHE-encrypted</strong> before leaving your browser. Files are hashed locally (keccak256) — the raw file is never uploaded.</p>
                             </div>
-                        </Card>
-                    </div>
-
-                    {/* ── Workflow & Submit ── */}
-                    <div className="space-y-3 pt-6 border-t border-border mt-8">
-                        <div>
-                            <h3 className="text-lg font-medium">Workflow Settings</h3>
-                            <p className="text-sm text-muted-foreground">Configure approval rules for this transaction.</p>
-                        </div>
-                        <Card className="overflow-hidden">
-                            <CardContent className="p-6">
-                                <div className="flex items-center space-x-3 p-4 rounded-lg border border-border bg-muted/20">
-                                    <Checkbox
-                                        id="requires-approval"
-                                        checked={requiresApproval}
-                                        onCheckedChange={(c) => setRequiresApproval(c === true)}
-                                        className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                                    />
-                                    <div className="space-y-1 leading-none">
-                                        <Label htmlFor="requires-approval" className="text-sm font-medium cursor-pointer">
-                                            Require Second Approver
-                                        </Label>
-                                        <p className="text-sm text-muted-foreground">
-                                            Flags this payment for Segregation of Duties. The approver must be a different address.
-                                        </p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-muted/40 border-t border-border">
-                                <div className="flex-1 text-sm text-muted-foreground">
-                                    {(transactionStatus === "Encrypting..." || transactionStatus === "Signing...") ? (
-                                        <span className="animate-pulse">Encrypting data locally...</span>
-                                    ) : (
-                                        <span>Please review all details before confirming.</span>
-                                    )}
-                                </div>
-                                <Button type="submit" size="lg" className="w-full sm:w-auto min-w-[200px]" disabled={isProcessing}>
-                                    {isProcessing ? (
-                                        <>
-                                            {transactionStatus !== "Encrypting..." && (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            )}
-                                            {transactionStatus === "Encrypting..."
-                                                ? "Encrypting Category..."
-                                                : transactionStatus || "Processing..."}
-                                        </>
-                                    ) : transactionStatus === "Complete" ? (
-                                        "Payment Successful ✓"
-                                    ) : (
-                                        "Confirm Payment"
-                                    )}
-                                </Button>
-                            </div>
-                        </Card>
-                    </div>
-                </div>
+                        </FieldGroup>
+                    </CardContent>
+                    
+                    <CardFooter className="border-t bg-muted/20 px-6 py-4 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-4">
+                        <p className="text-sm text-muted-foreground">
+                            Values are <strong className="font-medium text-foreground">encrypted locally</strong> via FHE before being sent onchain.
+                        </p>
+                        
+                        <Button 
+                            type="submit" 
+                            disabled={isProcessing || isInsufficient}
+                            className="w-full sm:w-auto"
+                        >
+                            {isProcessing ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    {transactionStatus || "Processing"}
+                                </>
+                            ) : transactionStatus === "Complete" ? (
+                                "Success ✓"
+                            ) : (
+                                "Send Payment"
+                            )}
+                        </Button>
+                    </CardFooter>
+                </Card>
             </form>
         </div>
     );

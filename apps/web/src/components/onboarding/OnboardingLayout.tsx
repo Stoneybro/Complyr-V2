@@ -8,13 +8,13 @@ import { Check } from "lucide-react";
 const STEPS = [
   {
     num: 1 as const,
-    title: "Deploy Account",
+    title: "Create Workspace",
     desc: "Self-register and deploy your account.",
   },
   {
     num: 2 as const,
-    title: "Initialize Defaults",
-    desc: "Set initial thresholds and configure.",
+    title: "Demo Configuration",
+    desc: "Initialize default limits and rules.",
   },
 ];
 
@@ -41,7 +41,7 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
       <aside className="w-[280px] shrink-0 border-r border-border flex flex-col px-5 py-10 gap-0.5">
         {/* Product wordmark */}
         <p className="text-xs font-semibold tracking-[0.15em] uppercase text-muted-foreground/60 mb-8 px-3">
-          Complyr Setup
+          Onboarding
         </p>
 
         {STEPS.map((step) => {
@@ -65,17 +65,17 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
               {/* Status icon */}
               <div
                 className={`
-                  mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-200
+                  mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-all duration-200
                   ${isDone ? "bg-primary text-primary-foreground" : ""}
-                  ${isActive ? "border-2 border-primary text-primary bg-transparent" : ""}
-                  ${isUpcoming ? "border border-border text-muted-foreground/40 bg-transparent" : ""}
+                  ${isActive ? "border-2 border-primary bg-transparent" : ""}
+                  ${isUpcoming ? "border border-border bg-transparent" : ""}
                 `}
               >
                 {isDone ? (
                   <Check className="h-3 w-3 stroke-[3]" />
-                ) : (
-                  <span>{step.num}</span>
-                )}
+                ) : isActive ? (
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                ) : null}
               </div>
 
               {/* Labels */}

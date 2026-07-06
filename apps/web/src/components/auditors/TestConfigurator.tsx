@@ -77,6 +77,7 @@ export function TestConfigurator({
     }
 
     setIsEncrypting(true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     try {
       const fhevm = await getFhevmInstance();
       const input = fhevm.createEncryptedInput(reviewRegistryAddress, address);

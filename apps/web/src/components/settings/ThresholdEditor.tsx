@@ -69,6 +69,7 @@ export function ThresholdEditor({
     }
 
     setIsEncrypting(true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     try {
       const fhevm = await getFhevmInstance();
 

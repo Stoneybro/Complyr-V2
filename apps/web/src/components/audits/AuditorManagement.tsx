@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   useAccount,
   useReadContract,
@@ -10,8 +10,12 @@ import {
 } from "wagmi";
 import { sepolia } from "wagmi/chains";
 import { getAddress, isAddress, type Abi } from "viem";
-import { Loader2, Trash2, Info, ExternalLink, History } from "lucide-react";
+import { Loader2, Trash2, Info, ExternalLink, History, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
+
+import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +68,7 @@ type PendingAction =
 
 interface AuditorManagementProps {
   auditRegistryAddress?: `0x${string}`;
+  businessAddress?: string;
 }
 
 const MAX_AUDITORS = 5;
@@ -94,10 +99,10 @@ function formatAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-export function AuditorManagement({ auditRegistryAddress }: AuditorManagementProps) {
+export function AuditorManagement({ auditRegistryAddress, businessAddress }: AuditorManagementProps) {
   const { address: walletAddress } = useAccount();
   const [newAddress, setNewAddress] = useState("");
-  const [newAccess, setNewAccess] = useState("signal");
+  const [newAccess, setNewAccess] = useState("analytics");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [grantDialogOpen, setGrantDialogOpen] = useState(false);
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
@@ -210,15 +215,29 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     chainId: sepolia.id,
   });
 
+  const hasToasted = useRef(false);
+
   useEffect(() => {
-    if (!isConfirmed || !pendingAction) return;
+    if (!isConfirmed) {
+      hasToasted.current = false;
+      return;
+    }
+    if (!pendingAction || hasToasted.current) return;
+
+    hasToasted.current = true;
 
     toast.success(
       pendingAction.type === "grant"
         ? "Auditor access granted"
         : pendingAction.type === "revoke" 
         ? "Auditor access revoked"
-        : "Historical access granted"
+        : "Historical access granted",
+      {
+        action: txHash ? {
+          label: "View Tx",
+          onClick: () => window.open(`https://sepolia.etherscan.io/tx/${txHash}`, "_blank"),
+        } : undefined,
+      }
     );
 
     refetchAuditors();
@@ -228,7 +247,7 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
     const timer = setTimeout(() => {
       if (pendingAction.type === "grant") {
         setNewAddress("");
-        setNewAccess("signal");
+        setNewAccess("analytics");
       }
 
       setPendingAction(null);
@@ -394,55 +413,47 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Grant Access</CardTitle>
-          <CardDescription>Authorize a new auditor to review your encrypted records.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleAddAuditor} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
-              <div className="space-y-2">
-                <Label htmlFor="auditor-address">Ethereum Address</Label>
-                <Input
-                  id="auditor-address"
-                  placeholder="0x..."
-                  value={newAddress}
-                  onChange={(event) => setNewAddress(event.target.value)}
-                  className="font-mono"
-                  disabled={formDisabled}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="access-tier">Access Tier</Label>
-                <Select
-                  value={newAccess}
-                  onValueChange={(value) => value && setNewAccess(value)}
-                  disabled={formDisabled}
-                >
-                  <SelectTrigger id="access-tier">
-                    <SelectValue placeholder="Select tier..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="analytics">Analytics</SelectItem>
-                    <SelectItem value="full">Full Access</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Grant Auditor Access</CardTitle>
+            <CardDescription>Authorize a new external auditor to review your encrypted records.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAddAuditor} className="space-y-6">
+              <FieldGroup className="grid gap-6 sm:grid-cols-[1fr_200px]">
+                <Field>
+                  <FieldLabel htmlFor="auditor-address">Ethereum Address</FieldLabel>
+                  <Input
+                    id="auditor-address"
+                    placeholder="0x..."
+                    value={newAddress}
+                    onChange={(event) => setNewAddress(event.target.value)}
+                    className="font-mono"
+                    disabled={formDisabled}
+                  />
+                  <FieldDescription>The auditor's wallet address.</FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="access-tier">Access Tier</FieldLabel>
+                  <Select
+                    value={newAccess}
+                    onValueChange={(value) => value && setNewAccess(value)}
+                    disabled={formDisabled}
+                  >
+                    <SelectTrigger id="access-tier">
+                      <SelectValue placeholder="Select tier..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="analytics">Analytics</SelectItem>
+                      <SelectItem value="full">Full Access</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>Level of encrypted access.</FieldDescription>
+                </Field>
+              </FieldGroup>
 
-            {txHash && (
-              <a
-                href={`https://sepolia.etherscan.io/tx/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-primary hover:underline font-mono"
-              >
-                {txHash.slice(0, 10)}...{txHash.slice(-8)}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
 
             {error && (
               <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -517,44 +528,67 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
                   pendingAction?.type === "revoke" &&
                   pendingAction.address.toLowerCase() === auditor.address.toLowerCase();
 
+                const Container = businessAddress ? Link : "div";
+                const containerProps = businessAddress
+                  ? { href: `/auditors/${businessAddress}?auditor=${auditor.address}`, target: "_blank", rel: "noopener noreferrer" }
+                  : {};
+
                 return (
-                  <div
+                  <Container
                     key={auditor.address}
-                    className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                    {...containerProps}
+                    className="group flex flex-col gap-3 rounded-xl border border-border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <div className="truncate font-mono text-sm font-medium" title={auditor.address}>
-                        <span className="sm:hidden">{formatAddress(auditor.address)}</span>
-                        <span className="hidden sm:inline">{auditor.address}</span>
+                    <div className="min-w-0 flex items-center gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 truncate font-mono text-sm font-medium" title={auditor.address}>
+                          <span className="sm:hidden">{formatAddress(auditor.address)}</span>
+                          <span className="hidden sm:inline">{auditor.address}</span>
+                          {businessAddress && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Active Auditor</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">Active Auditor</div>
                     </div>
                     <div className="flex items-center gap-4">
                       {getAccessBadge(auditor.access)}
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.preventDefault()}>
                         {auditor.access === AuditorAccess.FULL && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={() => handleHistoryClick(auditor.address)}
-                          >
-                            <History className="mr-2 h-3.5 w-3.5" />
-                            History
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                onClick={(e) => { e.preventDefault(); handleHistoryClick(auditor.address); }}
+                              >
+                                <ArchiveRestore className="mr-2 h-3.5 w-3.5" />
+                                Share Past Records
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Grant access to past encrypted payments</p>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => handleRevokeClick(auditor.address)}
-                        >
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />
-                          Revoke
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => { e.preventDefault(); handleRevokeClick(auditor.address); }}
+                              disabled={isRevoking}
+                            >
+                              {isRevoking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Revoke auditor access</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
-                  </div>
+                  </Container>
                 );
               })}
             </div>
@@ -600,50 +634,66 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
       <AlertDialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Grant Historical Access</AlertDialogTitle>
+            <AlertDialogTitle>Share Historical Records</AlertDialogTitle>
             <AlertDialogDescription>
-              Grant {auditorForHistory ? formatAddress(auditorForHistory) : ""} access to past payments. 
-              The registry currently has {paymentCount} recorded payments.
+              This auditor currently only has access to future payments. You can selectively decrypt and share your past payment history with them.
             </AlertDialogDescription>
           </AlertDialogHeader>
           
           <div className="py-4 space-y-4">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  id="history-all" 
-                  checked={historyType === "all"} 
-                  onChange={() => setHistoryType("all")} 
-                  className="mt-1"
-                />
-                <Label htmlFor="history-all" className="font-normal cursor-pointer">
-                  All {paymentCount} payments
-                </Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  id="history-recent" 
-                  checked={historyType === "recent"} 
-                  onChange={() => setHistoryType("recent")} 
-                  className="mt-1"
-                />
-                <Label htmlFor="history-recent" className="font-normal cursor-pointer flex items-center gap-2">
-                  Last 
+            <div className="grid grid-cols-1 gap-3">
+              <label 
+                className={`relative flex cursor-pointer flex-col rounded-lg border p-4 shadow-sm focus-within:ring-2 focus-within:ring-ring ${historyType === "all" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">All Past Records</div>
+                  <input 
+                    type="radio" 
+                    name="history-type"
+                    value="all"
+                    checked={historyType === "all"} 
+                    onChange={() => setHistoryType("all")} 
+                    className="sr-only"
+                  />
+                  {historyType === "all" && <div className="h-4 w-4 rounded-full border-4 border-primary" />}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  Share all {paymentCount} existing payments.
+                </div>
+              </label>
+
+              <label 
+                className={`relative flex cursor-pointer flex-col rounded-lg border p-4 shadow-sm focus-within:ring-2 focus-within:ring-ring ${historyType === "recent" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-medium">Recent Records</div>
+                  <input 
+                    type="radio" 
+                    name="history-type"
+                    value="recent"
+                    checked={historyType === "recent"} 
+                    onChange={() => setHistoryType("recent")} 
+                    className="sr-only"
+                  />
+                  {historyType === "recent" && <div className="h-4 w-4 rounded-full border-4 border-primary" />}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  Share the last 
                   <Input 
                     type="number" 
                     value={recentCount} 
-                    onChange={(e) => setRecentCount(e.target.value)} 
-                    disabled={historyType !== "recent"}
-                    className="w-20 h-8"
+                    onChange={(e) => {
+                      setRecentCount(e.target.value);
+                      setHistoryType("recent");
+                    }} 
+                    onClick={() => setHistoryType("recent")}
+                    className="w-20 h-8 bg-background"
                     min="1"
                     max={paymentCount.toString()}
                   /> 
-                  payments
-                </Label>
-              </div>
+                  payments.
+                </div>
+              </label>
             </div>
             
             <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground mt-4 flex gap-3">
@@ -667,5 +717,6 @@ export function AuditorManagement({ auditRegistryAddress }: AuditorManagementPro
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </TooltipProvider>
   );
 }
