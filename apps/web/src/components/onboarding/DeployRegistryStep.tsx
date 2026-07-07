@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ArrowRight, Loader2, Cpu, ExternalLink } from "lucide-react";
+import { CheckCircle2, ArrowRight, Loader2, Cpu, ExternalLink, InfoIcon } from "lucide-react";
 import {
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -9,6 +9,7 @@ import {
 } from "wagmi";
 import { sepolia } from "wagmi/chains";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
 import { ComplyrFactoryAddress } from "@/lib/CA";
 
@@ -90,7 +91,7 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
       <p className="text-base text-muted-foreground leading-relaxed mb-10">
         {isConfirmed
           ? "Your Complyr smart registries are live on Sepolia. Moving to security settings…"
-          : "We are deploying an isolated pair of smart contracts for your business. Ownership is transferred to you immediately, ensuring Complyr has zero admin rights."}
+          : "We are deploying an isolated pair of smart contracts for your business. Ownership is transferred to you immediately."}
       </p>
 
       {/* What gets deployed — idle only */}
@@ -105,13 +106,13 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
               <span className="text-muted-foreground">{item}</span>
             </div>
           ))}
-          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4 flex gap-3 text-sm text-foreground/80">
-            <span className="text-xl">🎁</span>
-            <div>
-              <strong className="block mb-0.5 text-primary">Demo Bonus</strong>
+          <Alert className="mt-6 border-primary/20 bg-primary/5">
+          <InfoIcon />
+            <AlertTitle className="text-primary font-bold">Demo Bonus</AlertTitle>
+            <AlertDescription className="text-foreground/80 leading-relaxed">
               Your workspace will be automatically funded with 5,000 cUSDC for testing.
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
@@ -141,7 +142,7 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
           ) : error ? (
             <>Retry <ArrowRight className="h-4 w-4" /></>
           ) : (
-            <>Deploy Account <ArrowRight className="h-4 w-4" /></>
+            <>Deploy Workspace <ArrowRight className="h-4 w-4" /></>
           )}
         </button>
       )}

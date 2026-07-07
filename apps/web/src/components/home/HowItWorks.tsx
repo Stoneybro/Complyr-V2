@@ -6,27 +6,27 @@ import { motion } from 'framer-motion';
 const steps = [
   {
     num: '01',
-    title: 'Smart Vaults',
-    label: '01 / SYSTEM TREASURY',
-    body: 'Deploy an audit-aware smart account onchain to act as your business\'s primary treasury.',
+    title: 'ENCRYPTED CONTEXT',
+    label: '01 / ENCRYPTED CONTEXT',
+    body: 'FHE encrypts business context, like GL categories and invoice hashes, alongside the payment amount.',
   },
   {
     num: '02',
-    title: 'Encryption',
-    label: '02 / SECURE METADATA',
-    body: 'Attach required audit context to your payment. Zama FHE keeps private context and review thresholds encrypted on Ethereum Sepolia.',
+    title: 'TRUSTLESS CALLBACK',
+    label: '02 / TRUSTLESS CALLBACK',
+    body: 'The token contract automatically triggers the audit infrastructure upon transfer, eliminating self-reporting fraud.',
   },
   {
     num: '03',
-    title: 'Settlement',
-    label: '03 / NATIVE EXECUTION',
-    body: 'The payment settles natively onchain while encrypted audit records are permanently anchored in the same transaction.',
+    title: 'RUNTIME EVALUATION',
+    label: '03 / RUNTIME CIPHERTEXT EVALUATION',
+    body: 'The smart contract evaluates auditor thresholds against the encrypted payment data natively on-chain.',
   },
   {
     num: '04',
-    title: 'Audit',
-    label: '04 / VERIFIABLE PROOFS',
-    body: 'Approve specific auditors. They can create private threshold tests and decrypt only the resulting audit findings.',
+    title: 'ISOLATED REVEAL',
+    label: '04 / ISOLATED REVEAL',
+    body: 'Auditors only receive decrypted pass/fail results, with tiered access controls governing any further visibility.',
   },
 ];
 
@@ -43,7 +43,7 @@ export default function HowItWorks() {
         >
           <div>
             <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-outline block mb-4">The Solution</span>
-            <h2 className="text-5xl font-bold tracking-tighter uppercase">A dual ledger for every payment.</h2>
+            <h2 className="text-5xl font-bold tracking-tighter uppercase">A trustless, confidential audit layer.</h2>
           </div>
           <div className="hidden md:block text-right">
             <span className="font-mono text-xs opacity-50">DEMO_BUILD: ALFA</span>

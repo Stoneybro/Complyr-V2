@@ -14,7 +14,7 @@ export default function Problem() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="md:col-span-4"
         >
-          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-outline">The gap nobody talks about</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-outline">The Accountability Gap</span>
         </motion.div>
         <motion.div 
           initial={{ opacity: 0, y: 30 }}
@@ -24,7 +24,7 @@ export default function Problem() {
           className="md:col-span-8"
         >
           <h2 className="text-4xl md:text-5xl font-semibold tracking-tight mb-16 leading-tight">
-            Blockchain transactions lack the business context needed for credible audits.
+            Private payments protect your business, but blind your auditors.
           </h2>
           <motion.div 
             initial={{ scaleX: 0 }}
@@ -34,7 +34,7 @@ export default function Problem() {
             className="h-px w-full bg-outline-variant/30 mb-8 origin-left"
           />
           <p className="text-lg text-on-surface-variant max-w-2xl leading-relaxed">
-            While the transfer itself is permanently recorded, the actual business context, like expense categories, jurisdictions, and references, remains scattered across emails and spreadsheets. For a business, this missing connection creates a weak audit trail.
+            Confidential tokens allow businesses to hide payment amounts, but this blinds external auditors. A business using private on-chain payments currently has to choose between handing over their decryption keys (destroying privacy) or asking auditors to just trust them.
           </p>
         </motion.div>
       </div>

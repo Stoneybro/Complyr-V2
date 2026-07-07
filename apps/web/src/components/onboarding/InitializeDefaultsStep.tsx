@@ -170,7 +170,7 @@ export function InitializeDefaultsStep({
         ) : isConfirmed ? (
           "Initialized ✓"
         ) : (
-          <>Initialize Account <ArrowRight className="ml-2 h-5 w-5" /></>
+          <>Initialize Workspace <ArrowRight className="ml-2 h-5 w-5" /></>
         )}
       </Button>
     </div>

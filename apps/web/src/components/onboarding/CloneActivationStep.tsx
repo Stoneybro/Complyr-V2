@@ -70,7 +70,7 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
 
       {/* Headline */}
       <h1 className="text-3xl font-semibold tracking-tight mb-4">
-        {status === "success" ? "Account deployed" : "Deploy your account"}
+        {status === "success" ? "Workspace deployed" : "Deploy your workspace"}
       </h1>
       <p className="text-base text-muted-foreground leading-relaxed mb-10">
         {status === "success"
@@ -117,7 +117,7 @@ export function CloneActivationStep({ walletAddress, onActivated }: CloneActivat
           ) : status === "error" ? (
             <>Retry <ArrowRight className="h-4 w-4" /></>
           ) : (
-            <>Deploy Account <ArrowRight className="h-4 w-4" /></>
+            <>Deploy Workspace <ArrowRight className="h-4 w-4" /></>
           )}
         </button>
       )}

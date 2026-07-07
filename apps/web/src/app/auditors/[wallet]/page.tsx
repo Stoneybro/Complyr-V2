@@ -46,15 +46,15 @@ export default function AuditorPortalPage() {
           <SidebarTrigger className="-ml-1" />
 
           <div className="flex flex-1 items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-xs font-semibold uppercase tracking-wider">
+                <span className=" font-medium text-muted-foreground">
                   Auditor workspace
                 </span>
                 {isReady && <span className="text-muted-foreground/40 font-light">/</span>}
               </div>
               {isReady && (
-                <h1 className="font-semibold text-lg tracking-tight text-foreground">
+                <h1 className="font-semibold  tracking-tight text-foreground">
                   {meta.title}
                 </h1>
               )}

@@ -530,7 +530,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
 
                 const Container = businessAddress ? Link : "div";
                 const containerProps = businessAddress
-                  ? { href: `/auditors/${businessAddress}?auditor=${auditor.address}`, target: "_blank", rel: "noopener noreferrer" }
+                  ? { href: `/auditors/${businessAddress}`, target: "_blank", rel: "noopener noreferrer" }
                   : {};
 
                 return (

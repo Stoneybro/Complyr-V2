@@ -12,55 +12,53 @@
 - Links: "Documentation", "GitHub", "Launch App"
 
 **Hero Section**
-- Headline: "Private audit infrastructure for onchain business payments."
-- Subheadline: "Complyr is a payments system that attaches encrypted audit records to every payment. Auditors can verify payments against private audit tests without decrypting the data."
+- Headline: "Confidential audit infrastructure for private on-chain payments."
+- Subheadline: "Complyr lets external auditors run ISA-standard audits on private business payments without ever seeing the actual transactions. Built with Zama FHE and ERC-7984."
 - Buttons: "Try the demo", "Read the docs"
 - System Status: "SYSTEM_STATUS: OPERATIONAL"
 
 **Problem Section**
-- Eyebrow: "The gap nobody talks about"
-- Headline: "Blockchain transactions lack the business context needed for credible audits."
-- Body: "While the transfer itself is permanently recorded, the actual business context, like expense categories, jurisdictions, and references, remains scattered across emails and spreadsheets. For a business, this missing connection creates a weak audit trail."
+- Eyebrow: "The Accountability Gap"
+- Headline: "Private payments protect your business, but blind your auditors."
+- Body: "Confidential tokens allow businesses to hide payment amounts, but this blinds external auditors. A business using private on-chain payments currently has to choose between handing over their decryption keys (destroying privacy) or asking auditors to just trust them."
 
 **How It Works Section**
 - Eyebrow: "The Solution"
-- Headline: "A dual ledger for every payment."
+- Headline: "A trustless, confidential audit layer."
 - Status text: "DEMO_BUILD: ALFA"
 - Steps:
-  - 01 / SYSTEM TREASURY (Smart Vaults): "Deploy an audit-aware smart account onchain to act as your business's primary treasury."
-  - 02 / SECURE METADATA (Encryption): "Attach required audit context to your payment. Zama FHE keeps private context and review thresholds encrypted on Ethereum Sepolia."
-  - 03 / NATIVE EXECUTION (Settlement): "The payment settles natively onchain while encrypted audit records are permanently anchored in the same transaction."
-  - 04 / VERIFIABLE PROOFS (Audit): "Approve specific auditors. They can create private threshold tests and decrypt only the resulting audit findings."
+  - 01 / ENCRYPTED CONTEXT: "FHE encrypts business context, like GL categories and invoice hashes, alongside the payment amount."
+  - 02 / TRUSTLESS CALLBACK: "The token contract automatically triggers the audit infrastructure upon transfer, eliminating self-reporting fraud."
+  - 03 / RUNTIME CIPHERTEXT EVALUATION: "The smart contract evaluates auditor thresholds against the encrypted payment data natively on-chain."
+  - 04 / ISOLATED REVEAL: "Auditors only receive decrypted pass/fail results, with tiered access controls governing any further visibility."
 
 **Features Section**
-- Eyebrow: "Built for real business operations"
-- Headline: "Everything a corporate treasury needs. Nothing it doesn't."
+- Eyebrow: "Built for real-world auditing workflows"
+- Headline: "Everything an auditor needs. Total privacy for the business."
 - Features:
-  - "Payroll & Subscriptions": "Automated, stateful recurring payments. Manage employee salaries and subscriptions securely on-chain."
-  - "Single Transfers": "Fast, reliable direct B2B transactions. The foundational layer for moving treasury funds efficiently."
-  - "Encrypted Audit Layer": "Zama FHE lets the contract run checks on private data without decrypting it. Auditors get answers, not access."
-  - "Account Abstraction": "Seamless gasless transactions and simple Web2-style social logins for frictionless enterprise onboarding."
-  - "External Audit Portal": "Give specific auditors a private portal. They set their own audit tests, the contract checks payments against those tests, and they decrypt only the outcome."
+  - "Immutable Evidence Anchors": "Plaintext hashes of off-chain invoices and purchase orders are anchored to every transaction to prevent tampering."
+  - "Tiered Access Controls": "Analytics-level auditors see encrypted rollups and metadata. Full-access auditors decrypt flagged transaction amounts scoped strictly to their engagement."
+  - "Blind Category Rollups": "Complyr updates all General Ledger category buckets simultaneously using FHE.select, so storage diffs reveal nothing to chain observers."
+  - "Encrypted Test Thresholds": "Auditors encrypt their test limits client-side. The business never knows the limits they are being tested against, preventing them from gaming the system."
+  - "Trustless Callbacks": "Audit checks are embedded directly in the token transfer function. Businesses cannot skip the audit step or manipulate reported amounts."
+  - "Isolated Audit Workspaces": "External auditors get a dedicated, read-only portal to view findings, track analytics, and execute authorized decryptions."
 
 **Use Cases Section**
 - Eyebrow: "Who is Complyr for?"
-- Headline: "Any business that pays people on-chain needs a private audit layer."
-- Subheadline: "From decentralized protocols to established fintech platforms moving to the public ledger."
+- Headline: "Bridging the gap between private transactions and accountability."
+- Subheadline: "For organizations that must prove compliance without exposing their entire financial history."
 - Cases:
-  - "Web3 Native DAOs": "Automate contributor payouts while maintaining public accountability and private, auditable records."
-  - "Global Payroll": "Streamline cross-border contractor payments with integrated, encrypted audit records."
-  - "Onchain Treasury": "Manage corporate capital calls and distributions with institutional-grade audit readiness and metadata."
-  - "Venture Capital & Grants": "Distribute funding to portfolio companies or grantees while maintaining strict, auditable privacy over exact allocation amounts."
+  - "Startups & Investors": "Provide VCs and board members with cryptographically verified financial reports without exposing individual employee salaries or vendor contracts."
+  - "Institutions & Grants": "Prove to government bodies or grant providers that funds were allocated exactly as mandated, backed by immutable on-chain evidence."
+  - "Regulated Stablecoins": "Maintain ISA-standard compliance for private stablecoin transfers to satisfy traditional accounting and regulatory requirements."
+  - "Web3 DAOs": "Automate contributor payouts while maintaining public accountability for the community and private, auditable records for the foundation."
 
 **Technology Section**
 - Eyebrow: "The stack"
 - Tech Roles:
-  - "Ethereum Sepolia" -> "Settlement"
-  - "Chainlink" -> "Automation"
-  - "Zama FHE" -> "Encryption"
-  - "Envio" -> "Data Indexing"
-  - "ERC-4337" -> "Account Abstraction"
-  - "Automation" -> "Scheduled Execution"
+  - "Ethereum Sepolia" -> "Settlement & Smart Contracts"
+  - "Zama FHE" -> "Encrypted State & Runtime Evaluation"
+  - "Python / Gradio" -> "Event Relay & KMS Bridge"
 - Protocol Schema: "AUDIT_PAYLOAD.JSON", "v0.2.0-beta"
 
 **Final CTA Section**
@@ -70,7 +68,7 @@
 
 **Footer**
 - Brand Headline: "Complyr"
-- Description: "Private audit infrastructure for onchain business payments. Built for the future of institutional treasury."
+- Description: "Private audit infrastructure for onchain business payments. Built for institutional accountability."
 - Eyebrow: "Built for Onchain Auditability"
 - Categories: "Resources" (Demo, Docs, GitHub, Contracts), "Powered By" (ETHEREUM SEPOLIA, ZAMA FHE, ENVIO)
 - Copyright text: "© 2026 COMPLYR INFRASTRUCTURE. ENCRYPTED COMPUTATION. IMMUTABLE AUDIT RECORDS. ONCHAIN SETTLEMENT."
@@ -79,7 +77,7 @@
 
 **Login Page**
 - Title: "Welcome back"
-- Description: "Complyr uses your wallet to sign transactions and attach encrypted audit records to every payment. No account or password needed."
+- Description: "Connect your wallet to access Complyr."
 - Connect Button Text: "Connect Wallet"
 - Error States: "Wrong network — switch"
 - Features List: 
@@ -102,20 +100,20 @@
 - Pending Title: "Waiting for signature…"
 - Confirming Title: "Confirming on Sepolia…"
 - Success Title: "Account deployed"
-- Description (Idle): "Complyr deploys an isolated AuditRegistry and ReviewTestRegistry clone pair for your business. Ownership is transferred to you immediately — Complyr has zero admin rights after this transaction."
-- Description (Success): "Your Complyr smart registry is live on Sepolia. Setting up authorization rules…"
+- Description (Idle): "We are deploying an isolated pair of smart contracts for your business. Ownership is transferred to you immediately, ensuring Complyr has zero admin rights."
+- Description (Success): "Your Complyr smart registries are live on Sepolia. Moving to security settings…"
 - Checklist:
-  - "AuditRegistry — encrypted payment records + findings"
-  - "ReviewTestRegistry — automated audit test engine"
-  - "Ownership transferred to your wallet — Complyr has zero admin rights"
+  - "Deploy dedicated smart contracts for encrypted payments and compliance tests"
+  - "Transfer full contract ownership directly to your wallet"
+- Bonus block: "Demo Bonus", "Your workspace will be automatically funded with 5,000 cUSDC for testing."
 - Button Loading States: "Deploying…", "Waiting for MetaMask…", "Confirming…"
 - Buttons: "Retry", "Deploy Account"
 - Bottom Hint: "Registering {wallet} on Sepolia"
 - Error Messages: "This wallet is already registered. Refreshing…", "Transaction failed. Please retry."
 
 **Onboarding - Step 2: Initialize Defaults**
-- Title: "Account deployed"
-- Description: "Your smart registry is live! We will now initialize it with default authorization thresholds for your delegation of authority rules."
+- Title: "Demo Configuration"
+- Description: "We will now initialize your workspace with standard threshold rules based on your 5,000 cUSDC demo balance. These values are encrypted via FHE before being stored on-chain."
 - Tiers Box: 
   - "Manager Tier" / "> $500"
   - "Director Tier" / "> $1,500"
@@ -133,29 +131,30 @@
   - "Audits" - "Review encrypted audit records."
   - "Transactions" - "View your transaction history."
   - "Settings" - "Manage business registry and approvers."
-- Empty State (Transactions):
-  - Title: "No transactions yet"
-  - Description: "Your onchain transaction history will appear here after your first payment."
+
+**Transaction History Page**
+- Title: "Transaction History"
+- Subtitle (Empty): "All onchain payments recorded in your audit registry."
+- Subtitle (With txs): "{rows.length} payment(s) recorded. Encrypted amounts can be decrypted on demand since you are the owner."
+- Button: "Refresh"
+- Empty State: "No transactions yet", "Your onchain transaction history will appear here after your first payment."
+- Table Headers: "Date", "Recipient", "Amount", "Actions"
+- Cell States: "Encrypted", "Decrypting…", "Decrypted", "Retry", "Decrypt"
 
 ## Dashboard / Payments
 
 **Payment Form - Single Payment Tab**
-- Section Title: "Transfer Details"
-- Description: "Enter the recipient address and amount to transfer."
-- Inputs: "Recipient Address", "Amount"
-- Balance Info: "Available Balance: {amount} USDC"
-- Audit Configuration Section:
-  - Title: "Audit Configuration"
-  - Description: "Securely attach GL categories and evidence to the transaction onchain."
-  - Inputs: "GL Category (Encrypted)", "Invoice (Optional)", "Purchase Order (Optional)"
-  - Info Text: "GL categories are FHE-encrypted before leaving your browser. Files are hashed locally (keccak256) — the raw file is never uploaded."
+- Alerts: "No auditor assigned", "You haven't authorized an external auditor yet. Check out the Audits page to add an auditor and enable private audits of your encrypted payment records."
+- Card Title: "Create Payment"
+- Card Description: "Send a secure, FHE-encrypted payment with an immutable audit record."
+- Inputs: "Recipient Address", "Amount", "Category (GL)", "Invoice", "Purchase Order"
+- Balance Info: "Insufficient balance (Current: {formatted} USDC)"
+- Document Info: "Supporting Documents (Optional)"
+- Validation Errors: "Invalid Ethereum address", "Amount must be greater than 0", "GL Category is required"
 
-**Workflow Settings & Submit**
-- Section Title: "Workflow Settings"
-- Description: "Configure approval rules for this transaction."
-- Option: "Require Second Approver" - "Flags this payment for Segregation of Duties. The approver must be a different address."
-- Submit Info Text: "Please review all details before confirming.", "Encrypting data locally..."
-- Button States: "Encrypting Category...", "Processing...", "Payment Successful ✓", "Confirm Payment"
+**Submit Section**
+- Submit Info Text: "Values are encrypted locally via FHE before being sent onchain."
+- Button States: "Processing", "Success ✓", "Send Payment"
 
 **Mint Tokens Page (Dev Only)**
 - Title: "Mint Dev Tokens"
@@ -170,7 +169,6 @@
 **Audit Overview**
 - Title: "Auditor Management"
 - Description: "Manage your external human auditors and configure their data access levels."
-- Button: "Go to Auditor Portal"
 
 **Auditor Management Form**
 - Title: "Grant Access"
@@ -193,11 +191,12 @@
 - Roster Slots: "{active} / 5 Slots Used"
 - Empty States: "Loading auditors...", "No auditors have been granted access yet."
 - Auditor Card Details: "Active Auditor", Badges ("Signal", "Analytics", "Full Access", "Revoked")
-- Card Buttons: "History", "Revoke"
+- Card Buttons: "Share Past Records", "Revoke"
+- Tooltips: "Grant access to past encrypted payments", "Revoke auditor access"
 - Modals:
-  - Grant Access: "Are you absolutely sure?", "This action will grant {tier} access to {address}. They will be able to see the data permitted under this tier.", "Grant Access", "Cancel"
-  - Revoke Access: "Are you absolutely sure?", "This action will revoke all access for {address}. They will no longer be able to read any encrypted data or access analytics.", "Revoke Access", "Cancel"
-  - Historical Access: "Grant Historical Access", "Grant {address} access to past payments. The registry currently has {count} recorded payments.", "All {count} payments", "Last {count} payments", "Granting access to large numbers of payments at once will consume more gas. Consider granting access in batches if the transaction fails."
+  - Grant Access: "Are you absolutely sure?", "This action will grant {newAccess} access to {newAddress}. They will be able to see the data permitted under this tier.", "Grant Access", "Cancel"
+  - Revoke Access: "Are you absolutely sure?", "This action will revoke all access for {auditorToRevoke}. They will no longer be able to read any encrypted data or access analytics.", "Revoke Access", "Cancel"
+  - Historical Access: "Share Historical Records", "This auditor currently only has access to future payments. You can selectively decrypt and share your past payment history with them.", "All Past Records", "Recent Records", "Share all {count} existing payments.", "Share the last {recentCount} payments.", "Granting access to large numbers of payments at once will consume more gas. Consider granting access in batches if the transaction fails."
 
 **Audit Records / Audit List**
 - Title: "Audit Records"
@@ -224,8 +223,8 @@
 **Approver Management**
 - Inputs: "Approver Wallet Address"
 - Errors: "Invalid Ethereum address.", "Encryption failed. Please retry."
-- Buttons: "Authorize", "Revoke", "Set Tier"
-- Status text: "Authorizing...", "Revoking...", "Encrypting...", "Setting Tier..."
+- Buttons: "Authorize Approver", "Remove Approver", "Set Encrypted Tier"
+- Status text: "Authorized", "Encrypting…", "Confirming in Wallet…", "Updating onchain…", "Tier Set"
 
 ## Auditor Portal 
 
@@ -239,53 +238,54 @@
 
 **Analytics**
 - Title: "Analytics"
-- Description: "Encrypted rollup totals decrypted client-side. Values update as new payments are recorded."
+- Description: "Encrypted rollup totals across GL categories and recipients. Decrypt to reveal values."
 - Section 1: "GL Category Totals"
-- Section 2: "Recipient Concentration"
-- Loading States: "Loading encrypted handles…", "Querying payment events…"
+- Section 2: "Recipient Concentration", "Cumulative spend per recipient."
+- Loading States: "Loading…", "Querying payment events…"
 - Empty States: "No payments recorded yet."
 - Values States: "Encrypted" (Lock icon), "—"
+- Buttons: "Refresh", "Decrypt All", "Decrypting…", "Decrypted"
 
 **Findings**
 - Title: "Findings"
 - Subtext (Zero): "Payment records that triggered one of your configured audit tests."
-- Subtext (Active): "{count} finding(s) in your engagement."
+- Subtext (Active): "{count} finding(s) in your engagement. Full access — decrypt flagged values on demand."
 - Empty State: "No findings yet", "When a payment triggers one of your tests, it will appear here."
 - Filters: "All Test Types", "All Severities"
-- Test Types: "Materiality", "Auth Breach", "Segregation of Duties", "Missing Evidence", "Category Concentration", "Recipient Concentration", "Structuring"
+- Test Types: "Materiality", "Auth Breach", "Segregation of Duties", "Missing Evidence", "Category Concentration", "Recipient Concentration"
 - Severities: "None", "Low", "Medium", "Critical"
-- Table Headers: "Payment ID", "Test Type", "Severity", "Triggered By", "Block", "Decrypt"
-- Buttons: "Decrypt", "No Access" (title: "Historical access not granted for this payment")
-- Tooltips: "[shared]"
+- Table Headers: "Payment ID", "Test Type", "Severity", "Block", "Flagged Value", "Actions"
+- Buttons: "Decrypt", "No Access" (title: "Historical access not granted for this payment"), "Details", "Collapse", "Retry"
+- Tooltips: "shared"
 
 **Payments (In-scope)**
 - Title: "Payments"
 - Description (Zero): "Payments within your engagement scope. Only records you have been explicitly granted access to are shown."
-- Description (Active): "{count} payment(s) in scope. Encrypted amounts can be decrypted on demand."
+- Description (Active): "{count} payment(s) in scope. Encrypted amounts, categories and authorization levels can be decrypted on demand."
 - Empty State: "No in-scope payments", "Ask the business owner to grant historical access, or wait for new payments to be recorded after your engagement started."
-- Table Headers: "ID", "Sender", "Recipient", "Amount", "Status", "Evidence", "Block"
+- Table Headers: "ID", "Recipient", "Amount", "Status", "Evidence", "Block", "Actions"
 - Status Badges: "Approved", "Pending"
 - Evidence Tags: "INV ✓", "INV —", "PO ✓", "PO —"
-- Buttons: "Decrypt", loading spinner
+- Buttons: "Decrypt", "Re-decrypt", "Retry", "Details", "Collapse", loading spinner
 
 **Test Configurator & Rules**
 - Test Rules Title: "Test Suite"
 - Test Rules Description: "Configure encrypted audit thresholds. Threshold values are FHE-encrypted before leaving your browser."
 - Test Definitions:
-  - "Materiality": "Flags any payment above the examination threshold. (Occurrence, Accuracy)"
-  - "Authorization Breach": "Always active. Flags if the approver's authority tier was insufficient for the payment amount. (Authorization)"
-  - "Segregation of Duties": "Always active. Flags if the same person initiated and approved a payment, or if the recipient approved their own payment. (Authorization)"
-  - "Missing Evidence": "Flags payments above the threshold that lack a supporting invoice or document hash. (Occurrence)"
-  - "Category Concentration": "Flags when cumulative spend in a specific GL category exceeds the threshold. (Classification)"
-  - "Recipient Concentration": "Flags when cumulative spend to a single recipient exceeds the threshold. (Completeness)"
-  - "Structuring": "Flags suspiciously split payments just below DoA thresholds. Launching in V2."
-- Badges: "Coming Soon", "Always Active", "Configured & Active", "Inactive"
+  - "Materiality": "Flags any payment above the configured threshold."
+  - "Authorization Breach": "Flags if the approver's authority tier was insufficient for the payment amount."
+  - "Segregation of Duties": "Flags if the same person initiated and approved a payment, or if the recipient approved their own payment."
+  - "Missing Evidence": "Flags payments above the threshold that lack a supporting invoice or document hash."
+  - "Category Concentration": "Flags when cumulative spend in a specific category exceeds the threshold."
+  - "Recipient Concentration": "Flags when cumulative spend to a single recipient exceeds the threshold."
+- Info Text: "These tests do not trigger during payments. They are evaluated automatically after approval"
+- Badges: "Always Active", "Active", "Inactive"
 - Labels: "Priority", "Scope", "Every X payments", "Threshold encrypted"
 - Configurator Modal Title: "Configure {Test Name}"
 - Inputs: 
   - "Priority Level" (Monitoring (Periodic), Standard (Every Payment), Critical (High Severity))
   - "Monitoring Frequency" (Every {X} payments)
   - "GL Category Scope" - "Only payments in this category will be tested."
-  - "Threshold (USD)" - "This value will be FHE encrypted before leaving your browser."
-- Validation Errors: "Wallet not connected.", "Frequency must be greater than 0 for Monitoring priority."
-- Buttons: "Cancel", "Save Configuration", "Encrypting…", "Confirming…", "Saving…"
+  - "Threshold (cUSDC)" - "This value will be FHE encrypted before leaving your browser."
+- Validation Errors: "Wallet not connected.", "Frequency must be greater than 0 for Monitoring priority.", "Encryption failed. Please retry."
+- Buttons: "Configure", "Edit Config", "Cancel", "Save Configuration", "Encrypting…", "Confirming…", "Saving…"

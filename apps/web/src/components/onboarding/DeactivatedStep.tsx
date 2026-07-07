@@ -18,9 +18,9 @@ export function DeactivatedStep({ walletAddress }: DeactivatedStepProps) {
         <XCircle className="h-5 w-5 text-destructive" />
       </div>
 
-      <h1 className="text-3xl font-semibold tracking-tight mb-4">Account deactivated</h1>
-      <p className="text-base text-muted-foreground leading-relaxed mb-8">
-        Your business account has been deactivated by the Complyr protocol admin. Your
+      <h1 className="text-3xl font-semibold tracking-tight mb-4">Workspace deactivated</h1>
+      <p className="text-base text-muted-foreground leading-relaxed mb-10 max-w-sm">
+        Your business workspace has been deactivated by the Complyr protocol admin. Your
         deployed contracts and data are unchanged and remain under your wallet's ownership.
       </p>
 

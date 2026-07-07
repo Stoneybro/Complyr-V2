@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useDisconnect, useAccount } from "wagmi";
 import Image from "next/image";
+import { truncateAddress } from "@/utils/format";
+import CopyText from "@/components/ui/copy";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -126,6 +128,28 @@ export function AuditorSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* Connected Wallet Card */}
+              {actualWalletAddress && (
+                <SidebarMenuItem className="mb-6">
+                  <div className="flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-sm group-data-[collapsible=icon]:hidden">
+                    <div className="flex flex-col px-4 py-3 bg-muted/20">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Access Tier
+                      </span>
+                      <span className="text-sm font-medium text-foreground">
+                        {accessLevel >= 3 ? "Full Access" : accessLevel >= 1 ? "Analytics Access" : "No Access"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/40">
+                      <span className="text-sm font-mono text-muted-foreground">
+                        {truncateAddress(actualWalletAddress)}
+                      </span>
+                      <CopyText text={actualWalletAddress} />
+                    </div>
+                  </div>
+                </SidebarMenuItem>
+              )}
+
               {isLocked
                 ? ALL_NAV_ITEMS.map((item) => (
                     <SidebarMenuItem key={item.id}>

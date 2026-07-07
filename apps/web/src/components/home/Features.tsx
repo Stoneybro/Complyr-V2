@@ -5,34 +5,34 @@ import { motion } from 'framer-motion';
 
 const features = [
   {
-    icon: 'schedule',
-    title: 'Payroll & Subscriptions',
-    body: 'Automated, stateful recurring payments. Manage employee salaries and subscriptions securely on-chain.',
+    icon: 'link',
+    title: 'Immutable Evidence Anchors',
+    body: 'Plaintext hashes of off-chain invoices and purchase orders are anchored to every transaction to prevent tampering.',
   },
   {
-    icon: 'verified_user',
-    title: 'Segregation of Duties',
-    body: 'Enforce strict approval workflows natively. Ensure no single party can unilaterally move funds beyond thresholds.',
+    icon: 'manage_accounts',
+    title: 'Tiered Access Controls',
+    body: 'Analytics-level auditors see encrypted rollups and metadata. Full-access auditors decrypt flagged transaction amounts scoped strictly to their engagement.',
   },
   {
-    icon: 'payments',
-    title: 'Single Transfers',
-    body: 'Fast, reliable direct B2B transactions. The foundational layer for moving treasury funds efficiently.',
+    icon: 'pie_chart',
+    title: 'Blind Category Rollups',
+    body: 'Complyr updates all General Ledger category buckets simultaneously using FHE.select, so storage diffs reveal nothing to chain observers.',
   },
   {
     icon: 'lock',
-    title: 'Encrypted Audit Layer',
-    body: 'Zama FHE lets the contract run checks on private data without decrypting it. Auditors get answers, not access.',
+    title: 'Encrypted Test Thresholds',
+    body: 'Auditors encrypt their test limits client-side. The business never knows the limits they are being tested against, preventing them from gaming the system.',
   },
   {
-    icon: 'fingerprint',
-    title: 'Account Abstraction',
-    body: 'Seamless gasless transactions and simple Web2-style social logins for frictionless enterprise onboarding.',
+    icon: 'bolt',
+    title: 'Trustless Callbacks',
+    body: 'Audit checks are embedded directly in the token transfer function. Businesses cannot skip the audit step or manipulate reported amounts.',
   },
   {
-    icon: 'policy',
-    title: 'External Audit Portal',
-    body: 'Give specific auditors a private portal. They set their own audit tests, the contract checks payments against those tests, and they decrypt only the outcome.',
+    icon: 'shield',
+    title: 'Isolated Audit Workspaces',
+    body: 'External auditors get a dedicated, read-only portal to view findings, track analytics, and execute authorized decryptions.',
   },
 ];
 
@@ -47,8 +47,8 @@ export default function Features() {
           transition={{ duration: 0.5 }}
           className="mb-20"
         >
-          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-outline block mb-4">Built for real business operations</span>
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tight max-w-2xl">Everything a corporate treasury needs. Nothing it doesn&apos;t.</h2>
+          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-outline block mb-4">Built for real-world auditing workflows</span>
+          <h2 className="text-4xl md:text-5xl font-bold tracking-tight max-w-2xl">Everything an auditor needs. Total privacy for the business.</h2>
         </motion.div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-outline-variant/20 border border-outline-variant/20 mt-12">

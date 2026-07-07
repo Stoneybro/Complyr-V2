@@ -17,10 +17,10 @@ export default function Hero() {
           className="h-px w-24 bg-primary mb-8 origin-left" 
         />
         <h1 className="text-[2.5rem] md:text-[6rem] leading-[0.95] font-bold tracking-tighter uppercase mb-8 max-w-5xl">
-          Private audit infrastructure for onchain business payments.
+          Confidential audit infrastructure for private on-chain payments.
         </h1>
         <p className="text-lg md:text-xl text-on-surface-variant max-w-3xl font-light mb-12 leading-relaxed mx-auto">
-          Complyr is a payments system that attaches encrypted audit records to every payment. Auditors can verify payments against private audit tests without decrypting the data.
+          Complyr lets external auditors run ISA-standard audits on private business payments without ever seeing the actual transactions. Built with Zama FHE and ERC-7984.
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
           <Link

@@ -5,10 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useReadContracts, usePublicClient, useWalletClient, useChainId } from "wagmi";
 import { formatUnits } from "viem";
 import { sepolia } from "wagmi/chains";
-import { Loader2, FileSearchCorner, Lock, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, FileSearchCorner, Lock, ChevronDown, ChevronUp, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
 import { getFhevmInstance } from "@/lib/fhe";
@@ -24,7 +25,6 @@ const TEST_TYPE_LABELS: Record<number, string> = {
   3: "Missing Evidence",
   4: "Category Concentration",
   5: "Recipient Concentration",
-  6: "Structuring",
 };
 
 const SEVERITY_CONFIG: Record<number, { label: string; className: string }> = {
@@ -49,7 +49,7 @@ type FindingSignal = {
   isShared: boolean;
 };
 
-type DecryptState = "idle" | "decrypting" | "done" | "error";
+type DecryptState = "idle" | "decrypting" | "done" | "error" | "not_authorized";
 
 type DecryptedFinding = {
   /** Formatted USDC amount that triggered the test, e.g. "12,345.00 USDC" */
@@ -245,8 +245,13 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
       // Auto-expand the row to show decrypted details
       setExpandedRows((prev) => new Set(prev).add(findingId));
     } catch (err) {
-      console.error("Finding decryption failed:", err);
-      setDecryptStates((s) => ({ ...s, [findingId]: "error" }));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("not authorized to user decrypt")) {
+        setDecryptStates((s) => ({ ...s, [findingId]: "not_authorized" }));
+      } else {
+        console.error("Finding decryption failed:", err);
+        setDecryptStates((s) => ({ ...s, [findingId]: "error" }));
+      }
     }
   };
 
@@ -280,6 +285,12 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
           <p className="text-sm text-muted-foreground">
             Payment records that triggered one of your configured audit tests.
           </p>
+          <Alert className="mt-4 bg-muted/40 text-muted-foreground border-border/50">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Recently triggered findings may take 1-2 minutes to appear.
+            </AlertDescription>
+          </Alert>
         </div>
         <EmptyState
           icon={<FileSearchCorner className="h-5 w-5" />}
@@ -302,6 +313,12 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
             </span>
           )}
         </p>
+        <Alert className="mt-4 bg-muted/40 text-muted-foreground border-border/50">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Recently triggered findings may take 1-2 minutes to appear.
+          </AlertDescription>
+        </Alert>
       </div>
 
       {/* Filters */}
@@ -402,7 +419,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
                               {isExpanded ? "Collapse" : "Details"}
                             </Button>
                           )}
-                          {decryptState !== "done" && (
+                          {decryptState !== "done" && decryptState !== "not_authorized" && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -427,6 +444,15 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
                                 "Decrypt"
                               )}
                             </Button>
+                          )}
+                          {decryptState === "not_authorized" && (
+                            <span
+                              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-2 py-1 rounded-md border border-border"
+                              title="This payment predates your auditor assignment. The encrypted handle was not allowlisted for your address."
+                            >
+                              <Lock className="h-3 w-3" />
+                              Pre-audit payment
+                            </span>
                           )}
                         </div>
                       </td>

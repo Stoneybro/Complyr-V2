@@ -221,7 +221,7 @@ export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
         <Alert className="w-full bg-muted/30 border-muted-foreground/20">
           <Info className="h-4 w-4 text-primary" />
           <AlertDescription className="text-muted-foreground leading-relaxed">
-            The following tests do not run at runtime. They run automatically when approvals are carried out.
+            These tests do not trigger during payments. They are evaluated automatically after approval
           </AlertDescription>
         </Alert>
         

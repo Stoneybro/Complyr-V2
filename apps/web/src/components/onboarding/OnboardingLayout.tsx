@@ -9,7 +9,7 @@ const STEPS = [
   {
     num: 1 as const,
     title: "Create Workspace",
-    desc: "Self-register and deploy your account.",
+    desc: "Self-register and deploy your workspace.",
   },
   {
     num: 2 as const,

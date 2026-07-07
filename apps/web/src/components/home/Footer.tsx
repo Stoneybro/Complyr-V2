@@ -17,7 +17,7 @@ export default function Footer() {
             </div>
           </div>
           <p className="font-inter text-[10px] uppercase tracking-widest leading-relaxed text-on-surface-variant max-w-xs mb-10">
-            Private audit infrastructure for onchain business payments. Built for the future of institutional treasury.
+            Private audit infrastructure for onchain business payments. Built for institutional accountability.
           </p>
           <div className="flex gap-4 items-center">
             <div className="w-10 h-px bg-on-surface"></div>

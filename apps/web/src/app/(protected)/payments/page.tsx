@@ -89,15 +89,15 @@ export default function Page() {
           <SidebarTrigger className="-ml-1" />
 
           <div className="flex flex-1 items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Business Workspace
+                <span className=" font-medium text-muted-foreground">
+                  Business workspace
                 </span>
                 {isDashboardReady && <span className="text-muted-foreground/40 font-light">/</span>}
               </div>
               {isDashboardReady && (
-                <h1 className="font-semibold text-lg tracking-tight text-foreground">
+                <h1 className="font-semibold  tracking-tight text-foreground">
                   {meta.title}
                 </h1>
               )}
@@ -111,7 +111,7 @@ export default function Page() {
                 onClick={handleAuditorNavigation}
                 className="text-muted-foreground hover:text-foreground flex items-center gap-1.5"
               >
-                Auditor Workspace
+                Auditor workspace
                 <ExternalLink className="h-4 w-4" />
               </Button>
             )}

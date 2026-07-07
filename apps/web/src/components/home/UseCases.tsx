@@ -5,24 +5,24 @@ import { motion } from 'framer-motion';
 
 const usecases = [
   {
-    title: 'Web3 Native DAOs',
+    title: 'Startups & Investors',
     num: '01',
-    body: 'Automate contributor payouts while maintaining public accountability and private, auditable records.',
+    body: 'Provide VCs and board members with cryptographically verified financial reports without exposing individual employee salaries or vendor contracts.',
   },
   {
-    title: 'Global Payroll',
+    title: 'Institutions & Grants',
     num: '02',
-    body: 'Streamline cross-border contractor payments with integrated, encrypted audit records.',
+    body: 'Prove to government bodies or grant providers that funds were allocated exactly as mandated, backed by immutable on-chain evidence.',
   },
   {
-    title: 'Onchain Treasury',
+    title: 'Regulated Stablecoins',
     num: '03',
-    body: 'Manage corporate capital calls and distributions with institutional-grade audit readiness and metadata.',
+    body: 'Maintain ISA-standard compliance for private stablecoin transfers to satisfy traditional accounting and regulatory requirements.',
   },
   {
-    title: 'Venture Capital & Grants',
+    title: 'Web3 DAOs',
     num: '04',
-    body: 'Distribute funding to portfolio companies or grantees while maintaining strict, auditable privacy over exact allocation amounts.',
+    body: 'Automate contributor payouts while maintaining public accountability for the community and private, auditable records for the foundation.',
   },
 ];
 
@@ -38,10 +38,10 @@ export default function UseCases() {
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
             <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-outline block mb-4">Who is Complyr for?</span>
-            <h2 className="text-5xl font-bold tracking-tighter uppercase leading-[1.1] mb-8 text-on-surface">Any business that pays people on-chain needs a private audit layer.</h2>
+            <h2 className="text-5xl font-bold tracking-tighter uppercase leading-[1.1] mb-8 text-on-surface">Bridging the gap between private transactions and accountability.</h2>
             <div className="h-2 w-24 bg-primary mb-12"></div>
             <p className="text-sm text-on-surface-variant uppercase leading-loose tracking-tighter max-w-xs">
-              From decentralized protocols to established fintech platforms moving to the public ledger.
+              For organizations that must prove compliance without exposing their entire financial history.
             </p>
           </motion.div>
           <div className="grid grid-cols-1 gap-12">

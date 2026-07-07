@@ -37,7 +37,6 @@ interface AnalyticsProps {
 
 type HandleMap = Record<number | string, FheHandle>;
 type ValueMap = Record<number | string, bigint>;
-type PaymentRecordedLog = { args?: { recipient?: unknown } };
 
 export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress }: AnalyticsProps) {
   const publicClient = usePublicClient({ chainId: sepolia.id });
@@ -81,30 +80,61 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
     staleTime: Infinity,
   });
 
-  // ── Recipients: query PaymentRecorded events ──────────────────────────────
-  const { data: recipients = [], isLoading: recipientsLoading, refetch: refetchRecipients } = useQuery({
-    queryKey: ["analytics-recipients", auditRegistryAddress, deployedAtBlock.toString()],
+  // ── Recipients: derived from paymentCount + getPaymentMeta (same pattern as Payments.tsx) ───
+  // getContractEvents requires deployedAtBlock and RPC log-range support.
+  // Contract reads by index are reliable and consistent with how every other
+  // data source on this page works.
+  const { data: paymentCountData, isLoading: paymentCountLoading, refetch: refetchPaymentCount } = useQuery({
+    queryKey: ["analytics-payment-count", auditRegistryAddress],
     queryFn: async () => {
-      if (!publicClient || !deployedAtBlock) return [];
-      const logs = await publicClient.getContractEvents({
+      if (!publicClient) return 0;
+      const result = await publicClient.readContract({
         address: auditRegistryAddress,
         abi: auditRegistryAbi,
-        eventName: "PaymentRecorded",
-        fromBlock: deployedAtBlock,
-        toBlock: "latest",
+        functionName: "paymentCount",
       });
-      return [
-        ...new Set(
-          (logs as readonly PaymentRecordedLog[])
-            .map((log) => log.args?.recipient)
-            .filter((recipient): recipient is string => typeof recipient === "string")
-        ),
-      ];
+      return Number(result ?? 0);
     },
-    enabled: !!publicClient && !!deployedAtBlock,
+    enabled: !!publicClient,
     refetchOnWindowFocus: false,
-    staleTime: Infinity,
+    staleTime: 30_000,
   });
+
+  const totalPayments = paymentCountData ?? 0;
+
+  // getPaymentMeta checks _canReadPayment — must pass account= (same as Payments.tsx)
+  const { data: paymentMetaResults, isLoading: recipientsLoading, refetch: refetchRecipients } = useQuery({
+    queryKey: ["analytics-payment-meta", auditRegistryAddress, walletAddress, totalPayments],
+    queryFn: async () => {
+      if (!publicClient || totalPayments === 0) return [];
+      const results = await Promise.all(
+        Array.from({ length: totalPayments }, (_, i) =>
+          publicClient.readContract({
+            address: auditRegistryAddress,
+            abi: auditRegistryAbi,
+            functionName: "getPaymentMeta",
+            args: [BigInt(i)],
+            account: walletAddress,
+          })
+        )
+      );
+      return results
+        .map((r) => {
+          const t = r as readonly [string, string, string, string, string, number, boolean] | undefined;
+          return t ? (t[1] as string) : null; // index 1 = recipient
+        })
+        .filter((addr): addr is string => typeof addr === "string" && addr !== "0x0000000000000000000000000000000000000000");
+    },
+    enabled: !!publicClient && totalPayments > 0,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
+  // Unique recipients in stable insertion order
+  const recipients = useMemo(
+    () => [...new Set(paymentMetaResults ?? [])],
+    [paymentMetaResults]
+  );
 
   // ── Recipient handles: direct eth_call with account= ─────────────────────
   // getRecipientTotal also checks _canReadAnalytics() — same Multicall3 issue.
@@ -134,7 +164,7 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
     staleTime: Infinity,
   });
 
-  const isLoading = categoryLoading || recipientsLoading || recipientHandlesLoading || isRefreshing;
+  const isLoading = categoryLoading || paymentCountLoading || recipientsLoading || recipientHandlesLoading || isRefreshing;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -144,6 +174,7 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
     setDecryptError(null);
     await Promise.all([
       refetchCategory(),
+      refetchPaymentCount(),
       refetchRecipients(),
       refetchRecipientHandles(),
     ]);

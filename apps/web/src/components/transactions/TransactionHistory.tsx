@@ -21,7 +21,7 @@ interface TransactionHistoryProps {
   walletAddress?: `0x${string}`;
 }
 
-type DecryptState = "idle" | "decrypting" | "done" | "error";
+type DecryptState = "idle" | "decrypting" | "done" | "error" | "not_authorized";
 
 type DecryptedPayment = {
   amount: string;
@@ -115,8 +115,13 @@ export function TransactionHistory({
       setDecryptedPayments((v) => ({ ...v, [paymentId]: formatted }));
       setDecryptStates((s) => ({ ...s, [paymentId]: "done" }));
     } catch (err) {
-      console.error("Payment decryption failed:", err);
-      setDecryptStates((s) => ({ ...s, [paymentId]: "error" }));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("not authorized to user decrypt")) {
+        setDecryptStates((s) => ({ ...s, [paymentId]: "not_authorized" }));
+      } else {
+        console.error("Payment decryption failed:", err);
+        setDecryptStates((s) => ({ ...s, [paymentId]: "error" }));
+      }
     }
   };
 
@@ -236,33 +241,43 @@ export function TransactionHistory({
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-right">
-                    <Button
-                      variant={decryptState === "done" ? "ghost" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs gap-1.5"
-                      disabled={decryptState === "decrypting" || decryptState === "done"}
-                      onClick={() => handleDecrypt(row.paymentId)}
-                      title={
-                        decryptState === "error"
-                          ? "Decryption failed — click to retry"
-                          : undefined
-                      }
-                    >
-                      {decryptState === "decrypting" ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : decryptState === "done" ? (
-                        <Unlock className="h-3 w-3" />
-                      ) : (
+                    {decryptState === "not_authorized" ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-2 py-1 rounded-md border border-border"
+                        title="This payment was made before an auditor was added. The encrypted handle was not allowlisted for your address."
+                      >
                         <Lock className="h-3 w-3" />
-                      )}
-                      {decryptState === "decrypting"
-                        ? "Decrypting…"
-                        : decryptState === "done"
-                        ? "Decrypted"
-                        : decryptState === "error"
-                        ? "Retry"
-                        : "Decrypt"}
-                    </Button>
+                        Pre-audit payment
+                      </span>
+                    ) : (
+                      <Button
+                        variant={decryptState === "done" ? "ghost" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={decryptState === "decrypting" || decryptState === "done"}
+                        onClick={() => handleDecrypt(row.paymentId)}
+                        title={
+                          decryptState === "error"
+                            ? "Decryption failed — click to retry"
+                            : undefined
+                        }
+                      >
+                        {decryptState === "decrypting" ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : decryptState === "done" ? (
+                          <Unlock className="h-3 w-3" />
+                        ) : (
+                          <Lock className="h-3 w-3" />
+                        )}
+                        {decryptState === "decrypting"
+                          ? "Decrypting…"
+                          : decryptState === "done"
+                          ? "Decrypted"
+                          : decryptState === "error"
+                          ? "Retry"
+                          : "Decrypt"}
+                      </Button>
+                    )}
                   </td>
                 </tr>
               );

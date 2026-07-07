@@ -84,18 +84,17 @@ export function PaymentForm({
     }, [isProcessing, transactionStatus]);
 
     const validate = (data: RecipientData) => {
-        try {
-            recipientSchema.parse(data);
+        const result = recipientSchema.safeParse(data);
+        if (result.success) {
             setErrors({});
             return true;
-        } catch (err) {
-            if (err instanceof z.ZodError) {
-                const newErrors: Record<string, string> = {};
-                err.errors.forEach((e) => {
-                    if (e.path[0]) newErrors[e.path[0].toString()] = e.message;
-                });
-                setErrors(newErrors);
-            }
+        } else {
+            const newErrors: Record<string, string> = {};
+            const issues = result.error.issues || [];
+            issues.forEach((e: any) => {
+                if (e.path && e.path[0]) newErrors[e.path[0].toString()] = e.message;
+            });
+            setErrors(newErrors);
             setTransactionStatus("");
             return false;
         }
@@ -187,7 +186,7 @@ export function PaymentForm({
                     <CardHeader className="px-6 pt-4 pb-4">
                         <CardTitle className="text-xl">Create Payment</CardTitle>
                         <CardDescription>
-                            Send a secure, FHE-encrypted payment with compliance tracking.
+                            Send a secure, FHE-encrypted payment with an immutable audit record.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="px-6 py-6 space-y-6">
