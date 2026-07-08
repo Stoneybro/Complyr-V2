@@ -29,14 +29,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-import { SettingsView } from "@/components/settings/SettingsView";
 
 // View titles
 const viewMeta: Record<AppView, { title: string; description: string }> = {
   payments: { title: "Payments", description: "Send and manage onchain payments." },
   audits: { title: "Audits", description: "Review encrypted audit records." },
   transactions: { title: "Transactions", description: "View your transaction history." },
-  settings: { title: "Settings", description: "Manage business registry and approvers." },
 };
 
 export default function Page() {
@@ -146,12 +144,6 @@ export default function Page() {
                   />
                 )}
 
-                {activeView === "settings" && (
-                  <SettingsView
-                    auditRegistryAddress={auditRegistryAddress}
-                    walletAddress={walletAddress}
-                  />
-                )}
               </div>
             )}
           </OnboardingShell>

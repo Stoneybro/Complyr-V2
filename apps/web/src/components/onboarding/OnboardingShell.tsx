@@ -5,16 +5,13 @@ import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { DeployRegistryStep } from "@/components/onboarding/DeployRegistryStep";
-import { InitializeDefaultsStep } from "@/components/onboarding/InitializeDefaultsStep";
 import { DeactivatedStep } from "@/components/onboarding/DeactivatedStep";
 import { SkeletonPage } from "@/components/ui/skeleton-page";
-import { OnboardingSkeleton } from "@/components/onboarding/OnboardingSkeleton";
 import { WrongNetworkPage } from "@/components/auth/WrongNetworkPage";
 
 // Map each setup phase to the step number shown in OnboardingLayout
-const PHASE_TO_STEP: Record<string, 1 | 2> = {
+const PHASE_TO_STEP: Record<string, 1> = {
   "deploy-registry": 1,
-  "set-thresholds": 2,
 };
 
 interface OnboardingShellProps {
@@ -49,22 +46,13 @@ interface OnboardingShellProps {
 export function OnboardingShell({ children, onPhaseChange }: OnboardingShellProps) {
   const { state, refetch } = useOnboardingState();
 
-  const [lastPhase, setLastPhase] = React.useState<string>(state.phase);
-
-  // Keep sidebar lock in sync and track last phase
+  // Sync sidebar lock with phase
   React.useEffect(() => {
     onPhaseChange?.(state.phase === "ready");
-    if (state.phase !== "loading") {
-      setLastPhase(state.phase);
-    }
   }, [state.phase, onPhaseChange]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (state.phase === "loading") {
-    // If we are loading but we know they were just in an onboarding step, use the onboarding skeleton
-    if (lastPhase === "deploy-registry" || lastPhase === "set-thresholds") {
-      return <OnboardingSkeleton />;
-    }
     return <SkeletonPage />;
   }
 
@@ -115,14 +103,6 @@ export function OnboardingShell({ children, onPhaseChange }: OnboardingShellProp
         <DeployRegistryStep
           walletAddress={state.walletAddress}
           onDeployed={refetch}
-        />
-      )}
-
-      {state.phase === "set-thresholds" && (
-        <InitializeDefaultsStep
-          auditRegistryAddress={state.auditRegistryAddress}
-          walletAddress={state.walletAddress}
-          onConfigured={refetch}
         />
       )}
     </OnboardingLayout>

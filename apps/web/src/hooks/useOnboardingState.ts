@@ -3,9 +3,7 @@
 import { useMemo } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import type { Abi } from "viem";
 import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
-import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { ComplyrFactoryAddress } from "@/lib/CA";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -16,7 +14,6 @@ export type OnboardingPhase =
   | "wrong-network"
   | "deploy-registry"
   | "deactivated"
-  | "set-thresholds"
   | "ready";
 
 export type OnboardingState =
@@ -25,12 +22,6 @@ export type OnboardingState =
   | { phase: "wrong-network" }
   | { phase: "deploy-registry"; walletAddress: `0x${string}` }
   | { phase: "deactivated"; walletAddress: `0x${string}` }
-  | {
-      phase: "set-thresholds";
-      walletAddress: `0x${string}`;
-      auditRegistryAddress: `0x${string}`;
-      reviewRegistryAddress: `0x${string}`;
-    }
   | {
       phase: "ready";
       walletAddress: `0x${string}`;
@@ -74,25 +65,9 @@ export function useOnboardingState(): {
   const hasRegistry =
     !!reg && reg.deployedAtBlock > 0n;
 
-  // ── Step 2: Read authThresholdsConfigured from the AuditRegistry clone ────
-  const {
-    data: thresholdsConfigured,
-    isLoading: thresholdsLoading,
-    refetch: refetchThresholds,
-  } = useReadContract({
-    address: reg?.auditRegistry,
-    abi: AuditRegistryAbi as Abi,
-    functionName: "authThresholdsConfigured",
-    chainId: sepolia.id,
-    query: {
-      enabled: hasRegistry && reg?.active === true,
-    },
-  });
-
-  // ── Refetch both reads (called after tx confirmation) ─────────────────────
+  // ── Refetch (called after tx confirmation) ────────────────────────────────
   const refetch = () => {
     refetchRegistry();
-    refetchThresholds();
   };
 
   // ── State machine ─────────────────────────────────────────────────────────
@@ -119,21 +94,8 @@ export function useOnboardingState(): {
       return { phase: "deactivated", walletAddress: address };
     }
 
-    // Waiting for threshold read
-    if (thresholdsLoading) return { phase: "loading" };
-
     const auditRegistryAddress = reg!.auditRegistry;
     const reviewRegistryAddress = reg!.reviewTestRegistry;
-
-    // Thresholds not yet configured
-    if (!thresholdsConfigured) {
-      return {
-        phase: "set-thresholds",
-        walletAddress: address,
-        auditRegistryAddress,
-        reviewRegistryAddress,
-      };
-    }
 
     // All good — unlock the dashboard
     return {
@@ -151,8 +113,6 @@ export function useOnboardingState(): {
     registryLoading,
     hasRegistry,
     reg,
-    thresholdsLoading,
-    thresholdsConfigured,
   ]);
 
   return { state, refetch };

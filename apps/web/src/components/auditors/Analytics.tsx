@@ -80,10 +80,11 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
     staleTime: Infinity,
   });
 
-  // ── Recipients: derived from paymentCount + getPaymentMeta (same pattern as Payments.tsx) ───
-  // getContractEvents requires deployedAtBlock and RPC log-range support.
-  // Contract reads by index are reliable and consistent with how every other
-  // data source on this page works.
+  // ── Recipients: PaymentRecorded event scan (public — no access control) ────
+  // getPaymentMeta is gated by _canReadPayment, which excludes ANALYTICS tier.
+  // PaymentRecorded is a plain event — every address can getLogs for it.
+  // We use paymentCount as a proxy to know whether there are any payments at
+  // all, avoiding a wasted getLogs call when the registry is empty.
   const { data: paymentCountData, isLoading: paymentCountLoading, refetch: refetchPaymentCount } = useQuery({
     queryKey: ["analytics-payment-count", auditRegistryAddress],
     queryFn: async () => {
@@ -102,39 +103,41 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
 
   const totalPayments = paymentCountData ?? 0;
 
-  // getPaymentMeta checks _canReadPayment — must pass account= (same as Payments.tsx)
-  const { data: paymentMetaResults, isLoading: recipientsLoading, refetch: refetchRecipients } = useQuery({
-    queryKey: ["analytics-payment-meta", auditRegistryAddress, walletAddress, totalPayments],
+  const { data: recipients = [], isLoading: recipientsLoading, refetch: refetchRecipients } = useQuery({
+    // deployedAtBlock in key so query re-runs when it resolves from 0n
+    queryKey: ["analytics-recipients", auditRegistryAddress, deployedAtBlock.toString()],
     queryFn: async () => {
-      if (!publicClient || totalPayments === 0) return [];
-      const results = await Promise.all(
-        Array.from({ length: totalPayments }, (_, i) =>
-          publicClient.readContract({
-            address: auditRegistryAddress,
-            abi: auditRegistryAbi,
-            functionName: "getPaymentMeta",
-            args: [BigInt(i)],
-            account: walletAddress,
-          })
-        )
-      );
-      return results
-        .map((r) => {
-          const t = r as readonly [string, string, string, string, string, number, boolean] | undefined;
-          return t ? (t[1] as string) : null; // index 1 = recipient
-        })
-        .filter((addr): addr is string => typeof addr === "string" && addr !== "0x0000000000000000000000000000000000000000");
+      if (!publicClient) return [];
+
+      // fromBlock: use deployedAtBlock when it's valid; otherwise fall back to
+      // "earliest" as a safe default. Sepolia RPC nodes accept getLogs from
+      // "earliest" but some cap the range — if this returns empty unexpectedly,
+      // hitting Refresh after the page has fully hydrated (deployedAtBlock > 0n)
+      // will re-run with the correct start block.
+      const fromBlock: bigint | "earliest" = deployedAtBlock > 0n ? deployedAtBlock : "earliest";
+
+      const logs = await publicClient.getContractEvents({
+        address: auditRegistryAddress,
+        abi: auditRegistryAbi,
+        eventName: "PaymentRecorded",
+        fromBlock,
+        toBlock: "latest",
+      });
+
+      type Log = { args?: { recipient?: unknown } };
+      return [
+        ...new Set(
+          (logs as readonly Log[])
+            .map((l) => l.args?.recipient)
+            .filter((r): r is string => typeof r === "string")
+        ),
+      ];
     },
+    // Run whenever there are payments — no dependency on deployedAtBlock being non-zero
     enabled: !!publicClient && totalPayments > 0,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
-
-  // Unique recipients in stable insertion order
-  const recipients = useMemo(
-    () => [...new Set(paymentMetaResults ?? [])],
-    [paymentMetaResults]
-  );
 
   // ── Recipient handles: direct eth_call with account= ─────────────────────
   // getRecipientTotal also checks _canReadAnalytics() — same Multicall3 issue.
@@ -205,19 +208,22 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
       const catKeys: { key: number; hex: `0x${string}` }[] = [];
       const recKeys: { key: string; hex: `0x${string}` }[] = [];
 
-      // Category handles
+      // Category handles — skip zero handles (uninitialized FHE slots return
+      // 0x000...0 which the gateway rejects with an authorization error)
       if (categoryHandles) {
         Object.entries(categoryHandles).forEach(([idx, handle]) => {
           const hex = fheHandleToHex(handle);
+          if (hex === "0x" + "0".repeat(64)) return; // skip uninitialized
           catKeys.push({ key: Number(idx), hex });
           handlePairs.push({ handle: hex, contractAddress: auditRegistryAddress });
         });
       }
 
-      // Recipient handles
+      // Recipient handles — same zero-handle guard
       if (recipientHandles) {
         Object.entries(recipientHandles).forEach(([addr, handle]) => {
           const hex = fheHandleToHex(handle);
+          if (hex === "0x" + "0".repeat(64)) return; // skip uninitialized
           recKeys.push({ key: addr, hex });
           handlePairs.push({ handle: hex, contractAddress: auditRegistryAddress });
         });

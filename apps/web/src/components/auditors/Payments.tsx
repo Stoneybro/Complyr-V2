@@ -44,25 +44,16 @@ type DecryptState = "idle" | "decrypting" | "done" | "error";
 type PaymentMeta = {
   paymentId: number;
   recipient: string;
-  approver: string;
   invoiceHash: string;
   poHash: string;
   blockNumber: number;
-  approved: boolean;
 };
 
 type DecryptedPayment = {
   amount: string;        // formatted USDC
   category: string;      // GL category label
-  authLevel: string;     // ROUTINE / MANAGER / DIRECTOR / BOARD
 };
 
-const AUTH_LEVEL_LABELS: Record<number, string> = {
-  0: "Routine",
-  1: "Manager",
-  2: "Director",
-  3: "Board",
-};
 
 export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps) {
   const publicClient = usePublicClient({ chainId: sepolia.id });
@@ -143,11 +134,9 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
         return {
           paymentId:   inScopeIds[i],
           recipient:   t[1],
-          approver:    t[2],
           invoiceHash: t[3] as string,
           poHash:      t[4] as string,
           blockNumber: Number(t[5]),
-          approved:    t[6],
         } satisfies PaymentMeta;
       }).filter(Boolean) as PaymentMeta[];
     },
@@ -173,7 +162,7 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
         account: walletAddress,
       });
 
-      const [amountHandle, categoryHandle, authLevelHandle] = handlesData as [FheHandle, FheHandle, FheHandle];
+      const [amountHandle, categoryHandle] = handlesData as [FheHandle, FheHandle, FheHandle];
 
       // 2. FHE decrypt session (signs once per tab session)
       const fhevm = await getFhevmInstance();
@@ -188,15 +177,13 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
       );
 
       // 3. Encode handles as full bytes32 — toHex preserves the FHEVM layout
-      const amountHex    = fheHandleToHex(amountHandle);
-      const categoryHex  = fheHandleToHex(categoryHandle);
-      const authHex      = fheHandleToHex(authLevelHandle);
+      const amountHex   = fheHandleToHex(amountHandle);
+      const categoryHex = fheHandleToHex(categoryHandle);
 
       const results = await fhevm.userDecrypt(
         [
           { handle: amountHex,   contractAddress: auditRegistryAddress },
           { handle: categoryHex, contractAddress: auditRegistryAddress },
-          { handle: authHex,     contractAddress: auditRegistryAddress },
         ],
         session.privateKey,
         session.publicKey,
@@ -209,12 +196,10 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
 
       const rawAmount   = BigInt(results[amountHex]   as bigint | string);
       const rawCategory = Number(results[categoryHex] as bigint | string);
-      const rawAuth     = Number(results[authHex]     as bigint | string);
 
       const formatted: DecryptedPayment = {
         amount:    `${Number(formatUnits(rawAmount, 6)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`,
         category:  CATEGORY_LABELS[rawCategory] ?? `Category ${rawCategory}`,
-        authLevel: AUTH_LEVEL_LABELS[rawAuth] ?? `Level ${rawAuth}`,
       };
 
       setDecryptedPayments((v) => ({ ...v, [paymentId]: formatted }));
@@ -282,7 +267,6 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
               <th className="text-left px-4 py-3 font-medium">ID</th>
               <th className="text-left px-4 py-3 font-medium">Recipient</th>
               <th className="text-left px-4 py-3 font-medium">Amount</th>
-              <th className="text-left px-4 py-3 font-medium">Status</th>
               <th className="text-left px-4 py-3 font-medium">Evidence</th>
               <th className="text-left px-4 py-3 font-medium">Block</th>
               <th className="text-right px-4 py-3 font-medium">Actions</th>
@@ -318,16 +302,6 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
                       )}
                     </td>
 
-                    {/* Approval status */}
-                    <td className="px-4 py-3">
-                      {row.approved ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-600 border-0">
-                          Approved
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Pending</Badge>
-                      )}
-                    </td>
 
                     {/* Evidence hashes */}
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground space-x-2">
@@ -400,8 +374,8 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
                   {/* Expanded details panel */}
                   {isExpanded && decrypted && (
                     <tr className="bg-muted/10">
-                      <td colSpan={7} className="px-6 py-5">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-xs">
+                      <td colSpan={6} className="px-6 py-5">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 text-xs">
                           <div className="space-y-1">
                             <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
                               Amount
@@ -415,22 +389,6 @@ export function Payments({ auditRegistryAddress, walletAddress }: PaymentsProps)
                               GL Category
                             </p>
                             <p className="font-medium">{decrypted.category}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
-                              Auth Level Required
-                            </p>
-                            <p className="font-medium">{decrypted.authLevel}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-muted-foreground font-medium uppercase tracking-wide text-[10px]">
-                              Approver
-                            </p>
-                            <p className="font-mono">
-                              {row.approver && row.approver !== "0x" + "0".repeat(40)
-                                ? formatAddress(row.approver)
-                                : "—"}
-                            </p>
                           </div>
                         </div>
 

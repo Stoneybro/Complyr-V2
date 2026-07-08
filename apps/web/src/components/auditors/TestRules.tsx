@@ -27,20 +27,6 @@ const TEST_DEFINITIONS = [
     configurable: true,
   },
   {
-    id: 1,
-    name: "Authorization Breach",
-    description: "Flags if the approver's authority tier was insufficient for the payment amount.",
-    configurable: false,
-    builtin: true,
-  },
-  {
-    id: 2,
-    name: "Segregation of Duties",
-    description: "Flags if the same person initiated and approved a payment, or if the recipient approved their own payment.",
-    configurable: false,
-    builtin: true,
-  },
-  {
     id: 3,
     name: "Missing Evidence",
     description: "Flags payments above the threshold that lack a supporting invoice or document hash.",
@@ -63,7 +49,6 @@ const TEST_DEFINITIONS = [
 
 const PRIORITY_LABELS = ["None", "Monitoring", "Standard", "Critical"];
 const CONFIGURABLE_TESTS = TEST_DEFINITIONS.filter((t) => t.configurable);
-const INVARIANT_TESTS = TEST_DEFINITIONS.filter((t) => t.builtin);
 const CONFIGURABLE_TEST_IDS = CONFIGURABLE_TESTS.map((t) => t.id);
 
 type TestConfigResult = readonly [
@@ -217,29 +202,6 @@ export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
         ))}
       </div>
 
-      <div className="pt-6 mt-8 space-y-4">
-        <Alert className="w-full bg-muted/30 border-muted-foreground/20">
-          <Info className="h-4 w-4 text-primary" />
-          <AlertDescription className="text-muted-foreground leading-relaxed">
-            These tests do not trigger during payments. They are evaluated automatically after approval
-          </AlertDescription>
-        </Alert>
-        
-        {INVARIANT_TESTS.map((test) => (
-          <div
-            key={test.id}
-            className="p-6 rounded-xl border border-border bg-card flex flex-col sm:flex-row sm:items-start justify-between gap-6 transition-all"
-          >
-            <div className="flex-1 space-y-1.5">
-              <h4 className="text-base font-semibold">{test.name}</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {test.description}
-              </p>
-              {getTestDetails(test)}
-            </div>
-          </div>
-        ))}
-      </div>
 
       {configuringTest !== null && (
         <TestConfigurator

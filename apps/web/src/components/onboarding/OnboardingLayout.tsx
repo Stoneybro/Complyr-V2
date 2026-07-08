@@ -11,17 +11,12 @@ const STEPS = [
     title: "Create Workspace",
     desc: "Self-register and deploy your workspace.",
   },
-  {
-    num: 2 as const,
-    title: "Demo Configuration",
-    desc: "Initialize default limits and rules.",
-  },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface OnboardingLayoutProps {
-  currentStep: 1 | 2;
+  currentStep: 1;
   children: React.ReactNode;
 }
 
@@ -111,10 +106,6 @@ export function OnboardingLayout({ currentStep, children }: OnboardingLayoutProp
           key={currentStep}
           className="flex flex-1 flex-col px-12 py-10 animate-in fade-in slide-in-from-right-3 duration-300"
         >
-          {/* Step counter eyebrow */}
-          <p className="text-xs font-semibold tracking-[0.15em] uppercase text-muted-foreground/50 mb-8">
-            Step {currentStep} of 2
-          </p>
 
           {children}
         </div>

@@ -20,8 +20,6 @@ const auditRegistryAbi = AuditRegistryAbi as Abi;
 
 const TEST_TYPE_LABELS: Record<number, string> = {
   0: "Materiality",
-  1: "Auth Breach",
-  2: "Segregation of Duties",
   3: "Missing Evidence",
   4: "Category Concentration",
   5: "Recipient Concentration",
@@ -159,16 +157,23 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
       args: [walletAddress, BigInt(f.paymentId)],
       chainId: sepolia.id,
     })),
+    // Only FULL auditors use paymentAccessGranted — ANALYTICS auditors have finding-level
+    // access via _auditorFindingAccess which is always granted when a finding is in their feed.
     query: { enabled: accessLevel === 3 && signalResults.length > 0 },
   });
 
   const paymentAccessMap = useMemo(() => {
     const map: Record<number, boolean> = {};
     signalResults.forEach((f, i) => {
-      map[f.findingId] = Boolean(accessCheckData?.[i]?.result ?? false);
+      // ANALYTICS auditors have finding-level access: if a finding is in their feed,
+      // _auditorFindingAccess is set and getFinding() will pass. No paymentAccessGranted check needed.
+      // FULL auditors still use paymentAccessGranted (per-payment handle gate).
+      map[f.findingId] = accessLevel === 2
+        ? true
+        : Boolean(accessCheckData?.[i]?.result ?? false);
     });
     return map;
-  }, [signalResults, accessCheckData]);
+  }, [signalResults, accessCheckData, accessLevel]);
 
   const filtered = useMemo(() => {
     return signalResults.filter((f) => {
@@ -307,9 +312,12 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
         <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
         <p className="text-sm text-muted-foreground">
           {signalResults.length} finding{signalResults.length !== 1 ? "s" : ""} in your engagement.
-          {accessLevel === 3 && (
+          {accessLevel >= 2 && (
             <span className="ml-2 text-xs text-muted-foreground">
-              Full access — decrypt flagged values on demand.
+              {accessLevel === 2
+                ? "Analytics access — decrypt flagged values from your findings."
+                : "Full access — decrypt flagged values on demand."
+              }
             </span>
           )}
         </p>
@@ -356,7 +364,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
               <th className="text-left px-4 py-3 font-medium">Severity</th>
               <th className="text-left px-4 py-3 font-medium">Block</th>
               <th className="text-left px-4 py-3 font-medium">Flagged Value</th>
-              {accessLevel === 3 && (
+              {accessLevel >= 2 && (
                 <th className="text-right px-4 py-3 font-medium">Actions</th>
               )}
             </tr>
@@ -401,7 +409,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
                         </span>
                       )}
                     </td>
-                    {accessLevel === 3 && (
+                    {accessLevel >= 2 && (
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {decryptState === "done" && (
@@ -463,7 +471,7 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
                   {isExpanded && decrypted && (
                     <tr className="bg-muted/10">
                       <td
-                        colSpan={accessLevel === 3 ? 6 : 5}
+                        colSpan={accessLevel >= 2 ? 6 : 5}
                         className="px-6 py-4"
                       >
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">

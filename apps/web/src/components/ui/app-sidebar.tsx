@@ -50,11 +50,8 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
-import {
-  Settings,
-} from "lucide-react";
 
-export type AppView = "payments" | "audits" | "transactions" | "settings";
+export type AppView = "payments" | "audits" | "transactions";
 
 const navItems: {
   id: AppView;
@@ -64,7 +61,6 @@ const navItems: {
   { id: "payments", title: "Payments", icon: CreditCard },
   { id: "audits", title: "Audits", icon: FileSearchCorner },
   { id: "transactions", title: "Transactions", icon: ArrowLeftRight },
-  { id: "settings", title: "Settings", icon: Settings },
 ];
 
 type AppSidebarProps = {
@@ -169,14 +165,12 @@ export function AppSidebar({
                         </span>
                         <TooltipProvider>
                           <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                onClick={() => invalidate()}
-                                disabled={isBalanceFetching || isUnlocking}
-                                className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                              >
-                                <RotateCw className={`h-3.5 w-3.5 ${isBalanceFetching || isUnlocking ? 'animate-spin' : ''}`} />
-                              </button>
+                            <TooltipTrigger
+                              onClick={() => invalidate()}
+                              disabled={isBalanceFetching || isUnlocking}
+                              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                            >
+                              <RotateCw className={`h-3.5 w-3.5 ${isBalanceFetching || isUnlocking ? 'animate-spin' : ''}`} />
                             </TooltipTrigger>
                             <TooltipContent side="top">
                               <p className="text-xs">Refresh Balance</p>

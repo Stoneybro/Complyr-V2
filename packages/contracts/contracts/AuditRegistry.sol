@@ -160,6 +160,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     // grantHistoricalAccess (late-added auditors). Prevents a FULL auditor added after a payment
     // from reading records they were never scoped into.
     mapping(address auditor  => mapping(uint256 paymentId => bool granted)) private _paymentAccessGranted;
+    // Per-auditor, per-finding access grant — set in _createFinding() for all auditors who
+    // receive the finding in their feed (ANALYTICS and FULL). Enables O(1) lookup in getFinding().
+    mapping(address auditor  => mapping(uint256 findingId  => bool granted)) private _auditorFindingAccess;
 
     // ─── Events ──────────────────────────────────────────────────────────────
 
@@ -578,7 +581,18 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         if (findingId >= _findings.length) revert PaymentNotFound();
         Finding storage finding = _findings[findingId];
         PaymentRecord storage payment = _payments[finding.paymentId];
-        if (!_canReadPayment(payment, finding.paymentId, msg.sender)) revert Unauthorized();
+
+        // ANALYTICS and FULL auditors can access findings assigned to them.
+        // This is separate from _canReadPayment — ANALYTICS auditors do not have
+        // per-payment handle access but they DO have finding-level flaggedHandle access.
+        AuditorAccess callerAccess = auditorProfile[msg.sender].access;
+        bool hasFindingAccess =
+            (callerAccess == AuditorAccess.ANALYTICS || callerAccess == AuditorAccess.FULL)
+            && _auditorFindingAccess[msg.sender][findingId];
+
+        if (!hasFindingAccess && !_canReadPayment(payment, finding.paymentId, msg.sender)) {
+            revert Unauthorized();
+        }
         return (
             finding.paymentId,
             finding.testType,
@@ -614,7 +628,9 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         euint64 amount,
         CallbackAuditFields memory fields
     ) private {
-        if (!authThresholdsConfigured) revert ThresholdsNotConfigured();
+        // authThresholdsConfigured guard removed — DoA threshold setup is now opt-in.
+        // Payments record correctly without DoA thresholds; the authLevel derivation
+        // gracefully returns ROUTINE (0) when all threshold handles are zero.
         if (fields.recipient == address(0)) revert InvalidAddress();
 
         // Category range validation — clamp any encrypted value >= CATEGORY_BUCKETS to OTHER (7).
@@ -802,20 +818,31 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         FHE.allow(flaggedHandle, payment.recipient);
         FHE.allow(flaggedHandle, triggeringAuditor);
 
-        // All auditors with at least SIGNAL access see this finding in their feed if in scope
+        // All auditors with at least SIGNAL access see this finding in their feed if in scope.
+        // ANALYTICS and FULL auditors also receive FHE ACL access to the flaggedHandle so they
+        // can decrypt the specific value that triggered the test via getFinding().
         uint248 triggeringEngagement = auditorProfile[triggeringAuditor].engagementId;
         for (uint256 i = 0; i < _auditors.length; i++) {
             address aud = _auditors[i];
-            if (auditorProfile[aud].access != AuditorAccess.NONE) {
+            AuditorAccess audAccess = auditorProfile[aud].access;
+            if (audAccess != AuditorAccess.NONE) {
                 bool isSameEngagement = auditorProfile[aud].engagementId == triggeringEngagement;
                 if (isShared || isSameEngagement) {
                     _auditorFindings[aud].push(findingId);
+                    _auditorFindingAccess[aud][findingId] = true;
+                    // Grant FHE ACL so ANALYTICS/FULL auditors can decrypt the flaggedHandle.
+                    // SIGNAL auditors are excluded — they see metadata only.
+                    if (audAccess == AuditorAccess.ANALYTICS || audAccess == AuditorAccess.FULL) {
+                        FHE.allow(flaggedHandle, aud);
+                    }
                 }
             }
         }
-        // Also add to the triggering auditor (in case they're not in _auditors — e.g. ReviewTestRegistry itself for SoD)
+        // Also add to the triggering auditor if they are not in _auditors
+        // (e.g. ReviewTestRegistry itself for SoD findings).
         if (!_auditorListed[triggeringAuditor]) {
             _auditorFindings[triggeringAuditor].push(findingId);
+            _auditorFindingAccess[triggeringAuditor][findingId] = true;
         }
 
         emit FindingCreated(findingId, paymentId, testType, severity);

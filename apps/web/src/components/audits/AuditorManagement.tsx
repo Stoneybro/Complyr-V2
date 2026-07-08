@@ -413,7 +413,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
   };
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider delay={200}>
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -528,17 +528,8 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
                   pendingAction?.type === "revoke" &&
                   pendingAction.address.toLowerCase() === auditor.address.toLowerCase();
 
-                const Container = businessAddress ? Link : "div";
-                const containerProps = businessAddress
-                  ? { href: `/auditors/${businessAddress}`, target: "_blank", rel: "noopener noreferrer" }
-                  : {};
-
-                return (
-                  <Container
-                    key={auditor.address}
-                    {...containerProps}
-                    className="group flex flex-col gap-3 rounded-xl border border-border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
-                  >
+                const innerContent = (
+                  <>
                     <div className="min-w-0 flex items-center gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 truncate font-mono text-sm font-medium" title={auditor.address}>
@@ -554,16 +545,18 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.preventDefault()}>
                         {auditor.access === AuditorAccess.FULL && (
                           <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8"
-                                onClick={(e) => { e.preventDefault(); handleHistoryClick(auditor.address); }}
-                              >
-                                <ArchiveRestore className="mr-2 h-3.5 w-3.5" />
-                                Share Past Records
-                              </Button>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={(e) => { e.preventDefault(); handleHistoryClick(auditor.address); }}
+                                />
+                              }
+                            >
+                              <ArchiveRestore className="mr-2 h-3.5 w-3.5" />
+                              Share Past Records
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>Grant access to past encrypted payments</p>
@@ -571,16 +564,18 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
                           </Tooltip>
                         )}
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => { e.preventDefault(); handleRevokeClick(auditor.address); }}
-                              disabled={isRevoking}
-                            >
-                              {isRevoking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            </Button>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => { e.preventDefault(); handleRevokeClick(auditor.address); }}
+                                disabled={isRevoking}
+                              />
+                            }
+                          >
+                            {isRevoking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                           </TooltipTrigger>
                           <TooltipContent>
                             <p>Revoke auditor access</p>
@@ -588,7 +583,25 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
                         </Tooltip>
                       </div>
                     </div>
-                  </Container>
+                  </>
+                );
+
+                const containerClassName = "group flex flex-col gap-3 rounded-xl border border-border bg-background p-4 shadow-sm transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between";
+
+                return businessAddress ? (
+                  <Link
+                    key={auditor.address}
+                    href={`/auditors/${businessAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={containerClassName}
+                  >
+                    {innerContent}
+                  </Link>
+                ) : (
+                  <div key={auditor.address} className={containerClassName}>
+                    {innerContent}
+                  </div>
                 );
               })}
             </div>
