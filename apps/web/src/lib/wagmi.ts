@@ -2,7 +2,11 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { sepolia } from 'wagmi/chains';
 import { http } from 'wagmi';
 
-const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+let alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+if (alchemyKey?.startsWith('NEXT_PUBLIC_ALCHEMY_KEY=')) {
+  alchemyKey = alchemyKey.split('=')[1];
+}
+
 const sepoliaRpc = alchemyKey
   ? `https://eth-sepolia.g.alchemy.com/v2/${alchemyKey}`
   : 'https://ethereum-sepolia-rpc.publicnode.com'; // public fallback
