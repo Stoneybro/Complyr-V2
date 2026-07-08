@@ -112,6 +112,7 @@ Before the first payment, the business grants an external auditor access to its 
 // AuditRegistry.sol
 enum AuditorAccess {
     NONE,      // No access
+    SIGNAL,    // Findings feed only (severity + testType, no handles)
     ANALYTICS, // Encrypted rollup totals only — cannot see individual payment amounts
     FULL       // Full per-payment handle access + rollup access
 }

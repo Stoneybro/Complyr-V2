@@ -1,22 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ComplyrFactory — deploys per-business (AuditRegistry + ReviewTestRegistry)
-// clone pairs using the EIP-1167 minimal proxy pattern.
-//
-// Deployment sequence for each business:
-//   1. Clone AuditRegistry implementation
-//   2. Clone ReviewTestRegistry implementation
-//   3. Initialize both with the factory as temporary owner
-//   4. Wire them together (setReviewTestRegistry)
-//   5. Grant ReviewTestRegistry FULL access in AuditRegistry (for getPaymentHandles)
-//   6. Transfer ownership of both to the business
-//   7. Record the deployment in registries mapping
-//
-// After step 6, the factory has ZERO privileged access to business data.
-// The business owner controls their own registry from that point.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @title ComplyrFactory
+ * @notice Deploys per-business (AuditRegistry + ReviewTestRegistry)
+ * clone pairs using the EIP-1167 minimal proxy pattern.
+ * @dev After deployment, the factory has ZERO privileged access to business data.
+ * The business owner controls their own registry from that point.
+ */
 
 interface IAuditRegistryInit {
     function initialize(address confidentialToken, address initialOwner) external;
@@ -36,7 +27,7 @@ interface IConfidentialToken {
 
 contract ComplyrFactory {
 
-    // ─── State Variables ─────────────────────────────────────────────────────
+    // --- State Variables ---
 
     address public immutable confidentialToken;
     address public immutable auditRegistryImpl;
@@ -53,7 +44,7 @@ contract ComplyrFactory {
     mapping(address business => BusinessRegistry) public registries;
     address[] public businesses;
 
-    // ─── Events ──────────────────────────────────────────────────────────────
+    // --- Events ---
 
     event BusinessRegistered(
         address indexed business,
@@ -63,21 +54,21 @@ contract ComplyrFactory {
     event BusinessDeactivated(address indexed business);
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
 
-    // ─── Errors ──────────────────────────────────────────────────────────────
+    // --- Errors ---
 
     error NotOwner();
     error InvalidAddress();
     error AlreadyRegistered();
     error CloneFailed();
 
-    // ─── Modifiers ───────────────────────────────────────────────────────────
+    // --- Modifiers ---
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
 
-    // ─── Constructor ─────────────────────────────────────────────────────────
+    // --- Constructor ---
 
     constructor(
         address confidentialToken_,
@@ -95,7 +86,7 @@ contract ComplyrFactory {
         emit OwnerTransferred(address(0), msg.sender);
     }
 
-    // ─── Admin ───────────────────────────────────────────────────────────────
+    // --- Admin ---
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidAddress();
@@ -103,7 +94,7 @@ contract ComplyrFactory {
         owner = newOwner;
     }
 
-    // ─── Core: Deploy a Business Registry Pair ───────────────────────────────
+    // --- Core: Deploy a Business Registry Pair ---
 
     /// @notice Permissionless self-registration. Deploys an isolated
     ///         (AuditRegistry, ReviewTestRegistry) clone pair for msg.sender.
@@ -156,7 +147,7 @@ contract ComplyrFactory {
         emit BusinessDeactivated(business);
     }
 
-    // ─── View Functions ──────────────────────────────────────────────────────
+    // --- View Functions ---
 
     function businessCount() external view returns (uint256) {
         return businesses.length;

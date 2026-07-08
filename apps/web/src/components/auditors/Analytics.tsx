@@ -38,6 +38,11 @@ interface AnalyticsProps {
 type HandleMap = Record<number | string, FheHandle>;
 type ValueMap = Record<number | string, bigint>;
 
+function isUnauthorizedDecryptError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.toLowerCase().includes("not authorized to user decrypt");
+}
+
 export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress }: AnalyticsProps) {
   const publicClient = usePublicClient({ chainId: sepolia.id });
   const { data: walletClient } = useWalletClient();
@@ -234,33 +239,59 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
         return;
       }
 
-      const results = await fhevm.userDecrypt(
-        handlePairs,
-        session.privateKey,
-        session.publicKey,
-        session.signature,
-        [auditRegistryAddress],
-        walletAddress,
-        session.startTimestamp,
-        session.durationDays
+      const decryptResults: Record<`0x${string}`, bigint | boolean | string> = {};
+      let skippedUnauthorized = 0;
+
+      await Promise.all(
+        handlePairs.map(async ({ handle, contractAddress }) => {
+          try {
+            const result = await fhevm.userDecrypt(
+              [{ handle, contractAddress }],
+              session.privateKey,
+              session.publicKey,
+              session.signature,
+              [auditRegistryAddress],
+              walletAddress,
+              session.startTimestamp,
+              session.durationDays
+            );
+
+            const value = result[handle];
+            if (value !== undefined && value !== null) {
+              decryptResults[handle] = value;
+            }
+          } catch (err) {
+            if (isUnauthorizedDecryptError(err)) {
+              skippedUnauthorized += 1;
+              return;
+            }
+            throw err;
+          }
+        })
       );
 
       // Map results back by hex handle
       const newCatValues: ValueMap = {};
       catKeys.forEach(({ key, hex }) => {
-        const v = results[hex];
+        const v = decryptResults[hex];
         if (v !== undefined && v !== null) newCatValues[key] = BigInt(v as bigint | string);
       });
       setCategoryValues(newCatValues);
 
       const newRecValues: ValueMap = {};
       recKeys.forEach(({ key, hex }) => {
-        const v = results[hex];
+        const v = decryptResults[hex];
         if (v !== undefined && v !== null) newRecValues[key] = BigInt(v as bigint | string);
       });
       setRecipientValues(newRecValues);
 
-      setDecryptDone(true);
+      if (skippedUnauthorized > 0) {
+        setDecryptError(
+          `${skippedUnauthorized} analytics total${skippedUnauthorized === 1 ? "" : "s"} could not be decrypted because the wallet is not allowlisted for those historical handles.`
+        );
+      }
+
+      setDecryptDone(Object.keys(decryptResults).length > 0);
     } catch (err: unknown) {
       console.error("Analytics decryption failed:", err);
       setDecryptError(err instanceof Error ? err.message : "Decryption failed");

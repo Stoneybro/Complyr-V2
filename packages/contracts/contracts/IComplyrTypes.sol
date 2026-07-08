@@ -4,10 +4,10 @@ pragma solidity ^0.8.27;
 import {euint8} from "@fhevm/solidity/lib/FHE.sol";
 import {externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared types used by both ConfidentialUSDC and AuditRegistry.
-// Import this file in both contracts to avoid struct duplication.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @title Shared types used by both ConfidentialUSDC and AuditRegistry.
+ * @dev Import this file in both contracts to avoid struct duplication.
+ */
 
 /// @notice Fields submitted by the caller via confidentialTransferAndCallWithAudit.
 ///         The token decrypts the encrypted fields and passes CallbackAuditFields to

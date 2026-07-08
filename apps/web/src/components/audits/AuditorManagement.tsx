@@ -319,6 +319,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
   };
 
   const handleRevokeClick = (address: `0x${string}`) => {
+    if (isSubmitting) return;
     if (!auditRegistryAddress) {
       toast.error("Audit registry address is not available");
       return;
@@ -350,6 +351,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
   };
 
   const handleHistoryClick = (address: `0x${string}`) => {
+    if (isSubmitting) return;
     if (!auditRegistryAddress) {
       toast.error("Audit registry address is not available");
       return;
@@ -552,6 +554,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
                                   size="sm"
                                   className="h-8"
                                   onClick={(e) => { e.preventDefault(); handleHistoryClick(auditor.address); }}
+                                  disabled={isSubmitting}
                                 />
                               }
                             >
@@ -571,7 +574,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
                                 size="icon"
                                 className="h-8 w-8"
                                 onClick={(e) => { e.preventDefault(); handleRevokeClick(auditor.address); }}
-                                disabled={isRevoking}
+                                disabled={isSubmitting}
                               />
                             }
                           >
@@ -637,7 +640,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRevokeAccess} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={confirmRevokeAccess} disabled={isSubmitting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Revoke Access
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -723,7 +726,7 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
               setHistoryDialogOpen(false);
               setAuditorForHistory(null);
             }}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmHistoryAccess}>
+            <AlertDialogAction onClick={confirmHistoryAccess} disabled={isSubmitting}>
               Grant Access
             </AlertDialogAction>
           </AlertDialogFooter>

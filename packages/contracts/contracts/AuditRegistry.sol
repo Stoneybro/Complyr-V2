@@ -32,22 +32,15 @@ interface IConfidentialToken {
     function confidentialTransfer(address to, euint64 amount) external returns (euint64);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AuditRegistry — rebuilt for Complyr V2
-//
-// Stores encrypted payment records and findings per business.
-// Deployed as an EIP-1167 clone by ComplyrFactory (one instance per business).
-// The sole payment entry point is onConfidentialTransferReceived — no self-reporting.
-//
-// Key design decisions:
-//   - approved/approver always false/address(0) at creation; only approvePayment() sets them
-//   - ReviewTestRegistry gets read access via a dedicated path, NOT via the _auditors array
-//   - The _auditors array cap (MAX_AUDITORS = 5) is exclusively for external human auditors
-//   - setAuthTierThresholds is onlyOwner — business sets its own Delegation of Authority policy
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @title AuditRegistry
+ * @notice Stores encrypted payment records and findings per business.
+ * @dev Deployed as an EIP-1167 clone by ComplyrFactory.
+ * The sole payment entry point is onConfidentialTransferReceived.
+ */
 contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig {
 
-    // ─── Enums ───────────────────────────────────────────────────────────────
+    // --- Enums ---
 
     /// @notice GL-level payment categories replacing ISO 20022 purpose codes.
     ///         8 buckets vs old 12 = 33% fewer rollup FHE ops.
@@ -79,7 +72,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         FULL       // 3 — Full payment handle access + analytics
     }
 
-    // ─── Structs ─────────────────────────────────────────────────────────────
+    // --- Structs ---
 
     struct AuditorProfile {
         AuditorAccess access;
@@ -121,12 +114,12 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         bool    isShared;         // Whether this is a globally shared finding
     }
 
-    // ─── Constants ───────────────────────────────────────────────────────────
+    // --- Constants ---
 
     uint8 private constant CATEGORY_BUCKETS = 8;
     uint8 private constant MAX_AUDITORS     = 5; // Hard cap for external human auditors
 
-    // ─── State Variables ─────────────────────────────────────────────────────
+    // --- State Variables ---
 
     // NOTE: not immutable — EIP-1167 clone pattern requires mutable state
     address public confidentialToken;
@@ -164,7 +157,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     // receive the finding in their feed (ANALYTICS and FULL). Enables O(1) lookup in getFinding().
     mapping(address auditor  => mapping(uint256 findingId  => bool granted)) private _auditorFindingAccess;
 
-    // ─── Events ──────────────────────────────────────────────────────────────
+    // --- Events ---
 
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
     event AuditorAccessSet(address indexed auditor, AuditorAccess access, uint32 engagementId);
@@ -178,7 +171,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     event ApproverTierSet(address indexed approver);
     event HistoricalAccessGranted(address indexed auditor, uint256 recordCount);
 
-    // ─── Errors ──────────────────────────────────────────────────────────────
+    // --- Errors ---
 
     error NotOwner();
     error NotToken();
@@ -192,7 +185,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
     error AuditorLimitReached();
     error Reentrant();
 
-    // ─── Modifiers ───────────────────────────────────────────────────────────
+    // --- Modifiers ---
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -211,7 +204,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         _locked = false;
     }
 
-    // ─── Initialization (Clone Pattern) ──────────────────────────────────────
+    // --- Initialization (Clone Pattern) ---
 
     /// @notice Lock the implementation contract so it can never be initialized directly.
     constructor() {
@@ -235,7 +228,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit OwnerTransferred(address(0), initialOwner);
     }
 
-    // ─── Admin Functions ─────────────────────────────────────────────────────
+    // --- Admin Functions ---
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidAddress();
@@ -374,7 +367,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         return FHE.asEbool(true);
     }
 
-    // ─── Payment Approval ────────────────────────────────────────────────────
+    // --- Payment Approval ---
 
     /// @notice The only path to set approved=true and approver on a payment.
     ///         Two detective SoD checks run here (sender==approver, recipient==approver).
@@ -435,7 +428,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit PaymentApproved(paymentId, msg.sender);
     }
 
-    // ─── Finding Entry Point (called by ReviewTestRegistry only) ─────────────
+    // --- Finding Entry Point (called by ReviewTestRegistry only) ---
 
     /// @notice Creates a finding. Called by the paired ReviewTestRegistry after Gateway
     ///         decryption confirms a test was triggered.
@@ -466,7 +459,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit FindingEscalated(findingId, msg.sender);
     }
 
-    // ─── View Functions ──────────────────────────────────────────────────────
+    // --- View Functions ---
 
     function paymentCount() external view returns (uint256) {
         return _payments.length;
@@ -621,7 +614,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         return (f.testType, f.severity, f.triggeredAtBlock, f.paymentId, f.triggeredBy, f.isShared);
     }
 
-    // ─── Internal: Payment Recording ─────────────────────────────────────────
+    // --- Internal: Payment Recording ---
 
     function _recordPayment(
         address sender,
@@ -680,7 +673,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit PaymentRecorded(paymentId, sender, fields.recipient);
     }
 
-    // ─── Internal: FHE Derivations ───────────────────────────────────────────
+    // --- Internal: FHE Derivations ---
 
     /// @notice Derives the required authorization level from the payment amount.
     ///         Pure FHE — never decrypted, stored as a handle for test comparisons.
@@ -700,7 +693,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         );
     }
 
-    // ─── Internal: Rollups ───────────────────────────────────────────────────
+    // --- Internal: Rollups ---
 
     /// @notice Updates encrypted running totals for category and recipient dimensions.
     ///         Uses FHE.select loop for category (no plaintext leakage of which bucket was hit).
@@ -722,7 +715,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         _allowAnalyticsHandle(_recipientTotals[recipient]);
     }
 
-    // ─── Internal: ACL Grants ────────────────────────────────────────────────
+    // --- Internal: ACL Grants ---
 
     /// @notice Issues FHE ACL grants for all encrypted fields on a newly recorded payment.
     ///         ReviewTestRegistry gets direct grants (outside the auditor loop) so it never
@@ -785,7 +778,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         }
     }
 
-    // ─── Internal: Finding Creation ──────────────────────────────────────────
+    // --- Internal: Finding Creation ---
 
     /// @notice Creates a finding and links it to the triggering auditor only.
     ///         flaggedHandle ACL: contract + payment parties + triggering auditor.
@@ -848,7 +841,7 @@ contract AuditRegistry is IConfidentialFungibleTokenReceiver, ZamaEthereumConfig
         emit FindingCreated(findingId, paymentId, testType, severity);
     }
 
-    // ─── Internal: Access Control ────────────────────────────────────────────
+    // --- Internal: Access Control ---
 
     /// @notice Checks if an account can read a specific payment's data.
     ///         ReviewTestRegistry gets unconditional read access for test evaluation.

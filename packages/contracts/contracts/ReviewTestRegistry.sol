@@ -4,10 +4,11 @@ pragma solidity ^0.8.27;
 import {FHE, ebool, euint8, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig, ZamaConfig} from "../fhevmTemp/@fhevm/solidity/config/ZamaConfig.sol";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// IAuditRegistry — interface used by ReviewTestRegistry to read payment data
-// and write findings back to AuditRegistry.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @title IAuditRegistry
+ * @dev Interface used by ReviewTestRegistry to read payment data
+ * and write findings back to AuditRegistry.
+ */
 interface IAuditRegistry {
     function auditorProfile(address auditor) external view returns (uint8 access, uint248 engagementId);
 
@@ -43,29 +44,15 @@ interface IAuditRegistry {
     ) external;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ReviewTestRegistry — rebuilt for Complyr V2
-//
-// Auditors configure tests here. evaluateAll() is called per payment by AuditRegistry.
-// Test results (encrypted ebool) are stored and exposed to auditors who then call
-// requestFindingCreation() to trigger Gateway decryption → finding creation.
-//
-// Key design decisions:
-//   - 7 test types, all mapped to real ISA audit assertions
-//   - STRUCTURING deferred to V2 (enum value reserved, no-op in evaluateAll)
-//   - SEGREGATION_OF_DUTIES fires from approvePayment() not evaluateAll()
-//   - Gateway pattern for finding creation (two-phase: evaluate → request → callback)
-//   - maxActiveAuditors defaults to 5 (was 32)
-//
-// V1 known limitations (documented, not bugs):
-//   - AUTHORIZATION_BREACH only catches unapproved non-routine payments.
-//     Detecting "wrong authority level" requires an on-chain AuthorityRegistry (V2).
-//   - STRUCTURING requires encrypted band configuration tied to DoA thresholds (V2).
-//   - category is self-reported by sender; auditors verify off-chain via invoiceHash/poHash.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @title ReviewTestRegistry
+ * @notice Auditors configure tests here. evaluateAll() is called per payment by AuditRegistry.
+ * Test results (encrypted ebool) are stored and exposed to auditors who then call
+ * requestFindingCreation() to trigger Gateway decryption and finding creation.
+ */
 contract ReviewTestRegistry is ZamaEthereumConfig {
 
-    // ─── Enums ───────────────────────────────────────────────────────────────
+    // --- Enums ---
 
     /// @notice The 7 test types, each mapped to one or more ISA audit assertions.
     enum TestType {
@@ -91,7 +78,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         CRITICAL    // 3 — Runs on every payment, maps to highest finding severity
     }
 
-    // ─── Structs ─────────────────────────────────────────────────────────────
+    // --- Structs ---
 
     struct ReviewTest {
         euint64  threshold;          // Encrypted comparison threshold configured by auditor
@@ -101,9 +88,9 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         bool     exists;
     }
 
-    // ─── State Variables ─────────────────────────────────────────────────────
+    // --- State Variables ---
 
-    // ─── Relay ────────────────────────────────────────────────────────────────
+    // --- Relay ---
     // Hardcoded relay wallet — submits recordFindingIfTriggeredFor on behalf of
     // registered auditors. Does NOT consume an auditor slot. No on-chain config
     // needed — the relay is a trusted infrastructure wallet for Complyr V2.
@@ -130,7 +117,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
 
     address[] public activeAuditors;
 
-    // ─── Events ──────────────────────────────────────────────────────────────
+    // --- Events ---
 
     event OwnerTransferred(address indexed previousOwner, address indexed newOwner);
     event MaxActiveAuditorsSet(uint256 newLimit);
@@ -141,7 +128,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     event FindingRequested(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType);
     event RelayFindingSubmitted(address indexed auditor, uint256 indexed paymentId, uint8 indexed testType);
 
-    // ─── Errors ──────────────────────────────────────────────────────────────
+    // --- Errors ---
 
     error NotOwner();
     error InvalidAddress();
@@ -155,14 +142,14 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
     error ResultNotAvailable();
     error AlreadyInitialized();
 
-    // ─── Modifiers ───────────────────────────────────────────────────────────
+    // --- Modifiers ---
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
 
-    // ─── Initialization (Clone Pattern) ──────────────────────────────────────
+    // --- Initialization (Clone Pattern) ---
 
     /// @notice Lock the implementation contract.
     constructor() {
@@ -189,7 +176,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit OwnerTransferred(address(0), initialOwner);
     }
 
-    // ─── Admin Functions ─────────────────────────────────────────────────────
+    // --- Admin Functions ---
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidAddress();
@@ -203,7 +190,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit MaxActiveAuditorsSet(newLimit);
     }
 
-    // ─── Auditor Test Configuration ───────────────────────────────────────────
+    // --- Auditor Test Configuration ---
 
     /// @notice Configures or updates a test for the calling auditor.
     ///         Auditor must have ANALYTICS or FULL access granted by the business owner.
@@ -243,7 +230,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit TestDisabled(msg.sender, testType);
     }
 
-    // ─── Test Evaluation ─────────────────────────────────────────────────────
+    // --- Test Evaluation ---
 
     /// @notice Called by AuditRegistry._recordPayment for each payment.
     ///         Runs all configured active tests for all active auditors.
@@ -468,7 +455,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit TestEvaluated(approver, paymentId, testType, breach);
     }
 
-    // ─── View Functions ──────────────────────────────────────────────────────
+    // --- View Functions ---
 
     /// @notice Returns the AUTHORIZATION_BREACH ebool for a payment.
     ///         Access: ANALYTICS or FULL auditors, and the payment approver (via personal grant).
@@ -512,7 +499,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         return activeAuditors.length;
     }
 
-    // ─── Internal: Test Execution ────────────────────────────────────────────
+    // --- Internal: Test Execution ---
 
     /// @notice Runs a single FHE comparison test and stores the encrypted result.
     ///         Also stores the tested value for use as a flaggedHandle in Phase 2.
@@ -542,7 +529,7 @@ contract ReviewTestRegistry is ZamaEthereumConfig {
         emit TestEvaluated(auditor, paymentId, testType, result);
     }
 
-    // ─── Internal: Helpers ────────────────────────────────────────────────────
+    // --- Internal: Helpers ---
 
     function _shouldRun(ReviewTest storage testConfig, address auditor, address recipient) private view returns (bool) {
         if (testConfig.priority == Priority.CRITICAL || testConfig.priority == Priority.STANDARD) return true;
