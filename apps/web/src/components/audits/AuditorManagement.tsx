@@ -491,8 +491,8 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
           <div className="flex items-start gap-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary/70" />
             <div className="space-y-1">
-              <p><strong>Analytics:</strong> Can view encrypted GL category rollups, recipient totals, and audit findings.</p>
-              <p><strong>Full Access:</strong> Can read individual payment handles, run decryptions, and access evidence metadata.</p>
+              <p><strong>Analytics:</strong> Can view aggregate category and recipient spend totals, and decrypt only flagged transactions.</p>
+              <p><strong>Full Access:</strong> Can decrypt every individual payment amount and GL category within their approved scope.</p>
             </div>
           </div>
         </CardFooter>

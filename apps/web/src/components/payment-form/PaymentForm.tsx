@@ -165,7 +165,7 @@ export function PaymentForm({
                     <Info className="h-4 w-4" />
                     <AlertTitle>No auditor assigned</AlertTitle>
                     <AlertDescription className="text-wrap">
-                        You haven't authorized an external auditor yet. Check out the Audits page to add an auditor and enable private audits of your encrypted payment records.
+                        You haven't authorized an external auditor yet. Check out the Audits page to add an auditor and configure tests, otherwise your payments will not be audited.
                     </AlertDescription>
                     <AlertAction>
                         <Button 
