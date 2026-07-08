@@ -8,7 +8,7 @@
 
 <br />
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-usecomplyr.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://usecomplyr.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-complyr--v2.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://complyr-v2.vercel.app/)
 
 <br />
 
@@ -443,21 +443,12 @@ The relay handles nonce management, EIP-1559 gas pricing, and stalled transactio
 
 | Contract | Address |
 |---|---|
-| `ComplyrFactory` | [`[FACTORY_ADDRESS]`](https://sepolia.etherscan.io/address/[FACTORY_ADDRESS]) |
-| `ConfidentialUSDC` | [`[CUSDC_ADDRESS]`](https://sepolia.etherscan.io/address/[CUSDC_ADDRESS]) |
-| `AuditRegistry` (implementation) | [`[AUDIT_REGISTRY_IMPL]`](https://sepolia.etherscan.io/address/[AUDIT_REGISTRY_IMPL]) |
-| `ReviewTestRegistry` (implementation) | [`[REVIEW_TEST_IMPL]`](https://sepolia.etherscan.io/address/[REVIEW_TEST_IMPL]) |
+| `ComplyrFactory` | [`0x4508f247D0eBE3311e4dA32404cb75f308b20EBf`](https://sepolia.etherscan.io/address/0x4508f247D0eBE3311e4dA32404cb75f308b20EBf) |
+| `ConfidentialUSDC` | [`0x33cD2b437Db6A30E8Eac60EF888E3d4681e556EF`](https://sepolia.etherscan.io/address/0x33cD2b437Db6A30E8Eac60EF888E3d4681e556EF) |
+| `AuditRegistry` (implementation) | [`0x84F1489c1c1B30eddBDC163Ec489Acca76670D8`](https://sepolia.etherscan.io/address/0x84F1489c1c1B30eddBDC163Ec489Acca76670D8) |
+| `ReviewTestRegistry` (implementation) | [`0xbcA8e25Ab0d42FaC46082c8d8812CbAf5fDA573d`](https://sepolia.etherscan.io/address/0xbcA8e25Ab0d42FaC46082c8d8812CbAf5fDA573d) |
 
 The implementation contracts are deployed once. Every business that creates an account gets a dedicated EIP-1167 minimal proxy clone pair pointed at these implementations.
-
-### Live Transaction Proofs
-
-| Action | Transaction Hash |
-|---|---|
-| Business creates payment (amount encrypted) | [`[TX_HASH_PAYMENT]`](https://sepolia.etherscan.io/tx/[TX_HASH_PAYMENT]) |
-| Audit tests evaluate synchronously | *(Same transaction as above)* |
-| Relay submits KMS reveal to contract | [`[TX_HASH_RELAY]`](https://sepolia.etherscan.io/tx/[TX_HASH_RELAY]) |
-| Contract records immutable finding | *(Same transaction as above)* |
 
 ---
 
@@ -486,7 +477,7 @@ The smart contract layer includes a comprehensive test suite covering the full F
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/[YOUR_GITHUB_USERNAME]/complyrv2.git
+git clone https://github.com/your-github-username/complyrv2.git
 cd complyrv2
 pnpm install
 ```
@@ -500,9 +491,9 @@ cp apps/web/.env.local.example apps/web/.env.local
 Fill in `apps/web/.env.local`:
 
 ```env
-NEXT_PUBLIC_FACTORY_ADDRESS=[FACTORY_ADDRESS]
-NEXT_PUBLIC_CUSDC_ADDRESS=[CUSDC_ADDRESS]
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=[YOUR_WALLET_CONNECT_PROJECT_ID]
+NEXT_PUBLIC_COMPLYR_FACTORY=0x4508f247D0eBE3311e4dA32404cb75f308b20EBf
+NEXT_PUBLIC_CONFIDENTIAL_USDC=0x33cD2b437Db6A30E8Eac60EF888E3d4681e556EF
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_wallet_connect_project_id
 ```
 
 ### 3. Run the client
@@ -532,9 +523,9 @@ npm install   # installs kms_client.js dependencies
 Create a `.env` file in `relay/`:
 
 ```env
-PRIVATE_KEY=[RELAY_WALLET_PRIVATE_KEY]
-RPC_URL=[YOUR_SEPOLIA_RPC_URL]
-FACTORY_ADDRESS=[FACTORY_ADDRESS]
+PRIVATE_KEY=your_relay_wallet_private_key
+RPC_URL=your_sepolia_rpc_url
+FACTORY_ADDRESS=0x4508f247D0eBE3311e4dA32404cb75f308b20EBf
 ```
 
 Start the relay:

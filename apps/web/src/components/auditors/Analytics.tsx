@@ -390,57 +390,7 @@ export function Analytics({ auditRegistryAddress, deployedAtBlock, walletAddress
         )}
       </section>
 
-      {/* Recipient Concentration */}
-      <section className="space-y-4 pt-4 border-t border-border">
-        <div className="flex flex-col gap-1">
-          <h3 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Users className="h-5 w-5 text-muted-foreground" />
-            Recipient Concentration
-          </h3>
-          <p className="text-sm text-muted-foreground">Cumulative spend per recipient.</p>
-        </div>
 
-        {recipientsLoading || recipientHandlesLoading ? (
-          <div className="flex items-center justify-center text-muted-foreground text-sm py-8">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Querying payment events…
-          </div>
-        ) : recipients.length === 0 ? (
-          <div className="text-center text-sm text-muted-foreground py-8">
-            No payments recorded yet.
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50%]">Wallet Address</TableHead>
-                <TableHead className="text-right">Total Spent</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recipientRows.map((r) => (
-                <TableRow key={r.address}>
-                  <TableCell className="font-mono text-sm text-muted-foreground">
-                    {formatAddress(r.address)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {r.value !== null ? (
-                      <span className="font-mono text-emerald-600 font-medium">
-                        {formatUsdc(r.value)}
-                      </span>
-                    ) : r.hasHandle ? (
-                      <Badge variant="outline" className="text-muted-foreground font-normal">
-                        <Lock className="h-3 w-3 mr-1" /> Encrypted
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </section>
     </div>
   );
 }
