@@ -21,6 +21,20 @@
 
 ---
 
+**demo walkthrough for Complyr**
+
+Since the demo involves switching between two roles (business owner and auditor), here's a clearer step-by-step for anyone trying it:
+
+1. Connect your wallet in the **Business Workspace** and click "Create Business."
+2. Add an auditor — this can be a second wallet you control.
+3. Switch to that auditor address, go to the **Auditor Workspace**, and configure a test (e.g. Materiality) with a threshold.
+4. Switch back to the business wallet and send a confidential payment above that threshold.
+5. A finding should appear in the Auditor Workspace within a few seconds.
+
+Live demo: https://complyr-v2.vercel.app/ 
+
+---
+
  Complyr lets external auditors run ISA-standard (International Standards on Auditing) audits on private on-chain business payments without ever seeing the actual transactions. Payment amounts and business metadata are encrypted with FHE, allowing audits to be executed directly on ciphertext. No raw financial data is ever leaked on-chain or exposed to the auditor.
 
 ---
