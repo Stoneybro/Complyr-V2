@@ -19,7 +19,7 @@
 
 </div>
 
----
+
 
  Complyr lets external auditors run ISA-standard (International Standards on Auditing) audits on private on-chain business payments without ever seeing the actual transactions. Payment amounts and business metadata are encrypted with FHE, allowing audits to be executed directly on ciphertext. No raw financial data is ever leaked on-chain or exposed to the auditor.
 
