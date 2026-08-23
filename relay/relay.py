@@ -23,6 +23,7 @@ POLL_INTERVAL       = int(os.environ.get("POLL_INTERVAL_SECS", "5"))
 DEFAULT_START_BLOCK = int(os.environ.get("START_BLOCK", "11205602"))
 MAX_BLOCK_RANGE     = int(os.environ.get("MAX_BLOCK_RANGE", "100"))  # Alchemy eth_getLogs limit
 ARCHIVE_SKIP_THRESHOLD = 2000  # If we're this many blocks behind, skip to current (archive restriction)
+FINDING_TX_MAX_RETRIES = int(os.environ.get("FINDING_TX_MAX_RETRIES", "5"))
 STATE_FILE          = Path("/tmp/relay_state.json")
 LOG_FILE            = Path("/tmp/relay_logs.txt")
 SCRIPT_DIR          = Path(__file__).resolve().parent
@@ -39,10 +40,10 @@ if not LOG_FILE.exists():
 def log(level: str, message: str):
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
     line = f"{timestamp} [{level}] {message}"
-    
+
     # 1. Print directly to stdout with flush=True (bypasses logging module quirks)
     print(line, flush=True)
-    
+
     # 2. Append to log file for Gradio UI to read (keep last 100 lines)
     try:
         lines = LOG_FILE.read_text().splitlines()
@@ -87,8 +88,11 @@ TEST_EVALUATED_TOPIC = Web3.keccak(text="TestEvaluated(address,uint256,uint8,byt
 
 def load_state() -> dict:
     if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text())
-    return {"last_block": DEFAULT_START_BLOCK, "processed": []}
+        state = json.loads(STATE_FILE.read_text())
+    else:
+        state = {"last_block": DEFAULT_START_BLOCK, "processed": []}
+    state.setdefault("tx_retry_counts", {})
+    return state
 
 def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state))
@@ -137,7 +141,7 @@ def send_finding_tx(w3, relay_account, registry_contract, evt, get_next_nonce, l
             ).build_transaction({
                 "from": relay_account.address,
                 "nonce": nonce,
-                "gas": 300_000,
+                "gas": 500_000,
                 "maxFeePerGas": max_fee,
                 "maxPriorityFeePerGas": max_priority,
             })
@@ -152,7 +156,19 @@ def send_finding_tx(w3, relay_account, registry_contract, evt, get_next_nonce, l
                              f"testType={evt['testType']} tx={tx_hash.hex()}")
                 return True
             else:
-                log("WARNING", f"Tx reverted - paymentId={evt['paymentId']} (auditor may be deregistered)")
+                # Try to recover the actual revert reason via a simulated call at the
+                # same block, instead of guessing. Custom Solidity errors (Unauthorized,
+                # ResultNotAvailable, etc.) surface here far more reliably than from the
+                # receipt alone.
+                reason = "unknown"
+                try:
+                    registry_contract.functions.recordFindingIfTriggeredFor(
+                        evt["auditor"], evt["paymentId"], evt["testType"], True
+                    ).call({"from": relay_account.address}, block_identifier=receipt["blockNumber"])
+                except Exception as sim_err:
+                    reason = str(sim_err)
+                log("WARNING", f"Tx reverted - paymentId={evt['paymentId']} testType={evt['testType']} "
+                                f"tx={tx_hash.hex()} — simulated revert reason: {reason}")
                 return False  # revert is not a gas problem — don't retry with more gas
 
         except Exception as e:
@@ -171,7 +187,7 @@ def send_finding_tx(w3, relay_account, registry_contract, evt, get_next_nonce, l
 
 def run_relay():
     log("INFO", "Relay thread is starting...")
-    
+
     # Strip any accidental newlines or whitespace (like %0a from copy/paste)
     rpc_url           = os.environ.get("SEPOLIA_RPC_URL", "").strip()
     relay_private_key = os.environ.get("RELAY_PRIVATE_KEY", "").strip()
@@ -185,7 +201,7 @@ def run_relay():
         factory_address = Web3.to_checksum_address(factory_address)
         w3 = Web3(Web3.HTTPProvider(rpc_url))
         relay_account = w3.eth.account.from_key(relay_private_key)
-        
+
         log("INFO", f"Relay wallet : {relay_account.address}")
         log("INFO", f"Factory      : {factory_address}")
         log("INFO", f"Poll interval: {POLL_INTERVAL}s")
@@ -255,7 +271,11 @@ def run_relay():
             # --- Step 3: Fetch logs in chunks ---
             events_to_process: list[dict] = []
             poll_had_retryable_failure = False
+            log_fetch_incomplete = False  # set True if any chunk failed in a way that must block cursor advance
+
             for registry_addr in registry_addresses:
+                if log_fetch_incomplete:
+                    break  # a prior registry already hit a retryable RPC failure this cycle
                 chunk_start = from_block
                 while chunk_start <= latest_block:
                     chunk_end = min(chunk_start + MAX_BLOCK_RANGE - 1, latest_block)
@@ -269,12 +289,26 @@ def run_relay():
                     except Exception as e:
                         err_str = str(e)
                         if "400" in err_str or "Bad Request" in err_str:
-                            # Likely an Alchemy archive restriction — skip this chunk
+                            # Genuine, permanent Alchemy archive restriction — this range
+                            # will never succeed, so it's safe (and necessary) to skip it
+                            # rather than retry forever.
                             log("WARNING", f"[eth_getLogs blocks={chunk_start}-{chunk_end}] Archive block restricted (400). Skipping chunk.")
+                            chunk_start = chunk_end + 1
+                            continue
                         else:
-                            log("ERROR", f"[eth_getLogs blocks={chunk_start}-{chunk_end}] {type(e).__name__}: {e}")
-                        chunk_start = chunk_end + 1
-                        continue
+                            # Anything else (RPC hiccups like the -32602 malformed-param
+                            # error, timeouts, transient 5xx, etc.) is very likely transient.
+                            # Do NOT silently skip — that would mean any TestEvaluated event
+                            # in this range is lost forever once the cursor advances past it.
+                            # Instead: abandon this poll cycle's log-scanning entirely and
+                            # retry the whole range next cycle.
+                            log("ERROR", f"[eth_getLogs blocks={chunk_start}-{chunk_end}] {type(e).__name__}: {e}. "
+                                         f"Treating as transient — will retry this range next poll cycle.")
+                            log_fetch_incomplete = True
+                            break
+
+                    if log_fetch_incomplete:
+                        break
 
                     for raw_log in raw_logs:
                         topics = raw_log["topics"]
@@ -307,6 +341,13 @@ def run_relay():
                         })
                     chunk_start = chunk_end + 1
 
+            if log_fetch_incomplete:
+                # Skip processing this cycle entirely — we don't have a complete picture
+                # of events in this block range yet. Cursor stays put, retry next cycle.
+                log("WARNING", "Log scanning incomplete this cycle due to RPC error. Keeping block cursor unchanged so the full range retries.")
+                time.sleep(POLL_INTERVAL)
+                continue
+
             if events_to_process:
                 log("INFO", f"{len(events_to_process)} new event(s) to process")
 
@@ -333,7 +374,7 @@ def run_relay():
                 try:
                     kms_env = os.environ.copy()
                     kms_env["RELAY_PRIVATE_KEY"] = relay_private_key
-                    kms_env["KMS_DEBUG"] = "1"
+                    kms_env["KMS_DEBUG"] = os.environ.get("KMS_DEBUG", "0")
                     result = subprocess.run([
                         "node", "kms_client.js",
                         ebool_handle,
@@ -342,9 +383,9 @@ def run_relay():
                         rpc_url,
                         FHEVM_RELAYER_URL,
                     ], capture_output=True, text=True, check=True, cwd=SCRIPT_DIR, env=kms_env, timeout=120)
-                    
+
                     is_triggered = parse_kms_stdout(result.stdout)
-                    
+
                     log("INFO", f"KMS Decryption success: triggered={is_triggered}")
                 except subprocess.CalledProcessError as e:
                     details = (e.stderr or e.stdout or str(e)).strip()
@@ -359,13 +400,28 @@ def run_relay():
                 if not is_triggered:
                     log("INFO", f"Test did not trigger (false). Skipping finding creation.")
                     state["processed"].append(evt["key"])
+                    state["tx_retry_counts"].pop(evt["key"], None)
                     continue
 
                 ok = send_finding_tx(w3, relay_account, registry_contract, evt, get_next_nonce, log)
                 if ok:
                     state["processed"].append(evt["key"])
+                    state["tx_retry_counts"].pop(evt["key"], None)
                 else:
-                    poll_had_retryable_failure = True
+                    retries = state["tx_retry_counts"].get(evt["key"], 0) + 1
+                    state["tx_retry_counts"][evt["key"]] = retries
+                    if retries >= FINDING_TX_MAX_RETRIES:
+                        log("ERROR", f"QUARANTINING {evt['key']} after {retries} failed finding-tx attempts. "
+                                     f"Marking as processed to unblock the relay — this event needs manual "
+                                     f"investigation (auditor={evt['auditor']}, paymentId={evt['paymentId']}, "
+                                     f"testType={evt['testType']}).")
+                        state["processed"].append(evt["key"])
+                        state["tx_retry_counts"].pop(evt["key"], None)
+                        # Deliberately NOT setting poll_had_retryable_failure for this event —
+                        # it's been given up on, not deferred.
+                    else:
+                        log("WARNING", f"{evt['key']} failed finding-tx attempt {retries}/{FINDING_TX_MAX_RETRIES}. Will retry next cycle.")
+                        poll_had_retryable_failure = True
 
             if poll_had_retryable_failure:
                 log("WARNING", "One or more events failed before final processing. Keeping block cursor unchanged so they retry.")
@@ -405,7 +461,7 @@ def read_logs():
 with gr.Blocks(title="Complyr Relay") as demo:
     gr.Markdown("# Complyr V2 — Finding Relay")
     gr.Markdown("**Status: 🟢 Running** — Watching for `TestEvaluated` events automatically.")
-    
+
     with gr.Row():
         with gr.Column():
             gr.Markdown(f"**Network:** Sepolia\n**Poll Interval:** {POLL_INTERVAL}s")

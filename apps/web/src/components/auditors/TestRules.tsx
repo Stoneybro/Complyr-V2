@@ -19,7 +19,16 @@ interface TestRulesProps {
   accessLevel: number;
 }
 
-const TEST_DEFINITIONS = [
+interface TestDefinition {
+  id: number;
+  name: string;
+  description: string;
+  configurable: boolean;
+  requiresScope?: boolean;
+  builtin?: boolean;
+}
+
+const TEST_DEFINITIONS: TestDefinition[] = [
   {
     id: 0,
     name: "Materiality",

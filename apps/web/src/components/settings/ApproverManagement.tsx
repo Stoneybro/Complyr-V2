@@ -149,7 +149,7 @@ export function ApproverManagement({ auditRegistryAddress }: ApproverManagementP
             <FieldLabel htmlFor="approver-tier">Optional: Assign Approver Tier</FieldLabel>
             <Select
               value={selectedTier}
-              onValueChange={setSelectedTier}
+              onValueChange={(value) => { if (value !== null) setSelectedTier(value); }}
             >
               <SelectTrigger id="approver-tier">
                 <SelectValue placeholder="Select a tier" />

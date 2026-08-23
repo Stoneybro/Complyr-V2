@@ -5,11 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useReadContracts, usePublicClient, useWalletClient, useChainId } from "wagmi";
 import { formatUnits } from "viem";
 import { sepolia } from "wagmi/chains";
-import { Loader2, FileSearchCorner, Lock, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Loader2, FileSearchCorner, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FindingSync } from "@/components/auditors/FindingSync";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
 import { getFhevmInstance } from "@/lib/fhe";
@@ -34,8 +34,10 @@ const SEVERITY_CONFIG: Record<number, { label: string; className: string }> = {
 
 interface FindingsProps {
   auditRegistryAddress: `0x${string}`;
+  reviewRegistryAddress: `0x${string}`;
   accessLevel: number;
   walletAddress: `0x${string}`;
+  deployedAtBlock: bigint;
 }
 
 type FindingSignal = {
@@ -58,7 +60,13 @@ function formatAddress(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: FindingsProps) {
+export function Findings({
+  auditRegistryAddress,
+  reviewRegistryAddress,
+  accessLevel,
+  walletAddress,
+  deployedAtBlock,
+}: FindingsProps) {
   const [filterTest, setFilterTest] = useState<number | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
   const [decryptStates, setDecryptStates] = useState<Record<number, DecryptState>>({});
@@ -285,17 +293,19 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
   if (signalResults.length === 0) {
     return (
       <div className="max-w-4xl mx-auto w-full pb-12 space-y-6">
-        <div className="flex flex-col gap-1 mb-6 border-b border-border pb-6">
-          <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
-          <p className="text-sm text-muted-foreground">
-            Payment records that triggered one of your configured audit tests.
-          </p>
-          <Alert className="mt-4 bg-muted/40 text-muted-foreground border-border/50">
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              Recently triggered findings may take 1-2 minutes to appear.
-            </AlertDescription>
-          </Alert>
+        <div className="flex items-start justify-between gap-4 mb-6 border-b border-border pb-6">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
+            <p className="text-sm text-muted-foreground">
+              Payment records that triggered one of your configured audit tests.
+            </p>
+          </div>
+          <FindingSync
+            auditRegistryAddress={auditRegistryAddress}
+            reviewRegistryAddress={reviewRegistryAddress}
+            walletAddress={walletAddress}
+            deployedAtBlock={deployedAtBlock}
+          />
         </div>
         <EmptyState
           icon={<FileSearchCorner className="h-5 w-5" />}
@@ -308,25 +318,27 @@ export function Findings({ auditRegistryAddress, accessLevel, walletAddress }: F
 
   return (
     <div className="max-w-5xl mx-auto w-full pb-12 space-y-6">
-      <div className="flex flex-col gap-1 mb-6 border-b border-border pb-6">
-        <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
-        <p className="text-sm text-muted-foreground">
-          {signalResults.length} finding{signalResults.length !== 1 ? "s" : ""} in your engagement.
-          {accessLevel >= 2 && (
-            <span className="ml-2 text-xs text-muted-foreground">
-              {accessLevel === 2
-                ? "Analytics access — decrypt flagged values from your findings."
-                : "Full access — decrypt flagged values on demand."
-              }
-            </span>
-          )}
-        </p>
-        <Alert className="mt-4 bg-muted/40 text-muted-foreground border-border/50">
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            Recently triggered findings may take 1-2 minutes to appear.
-          </AlertDescription>
-        </Alert>
+      <div className="flex items-start justify-between gap-4 mb-6 border-b border-border pb-6">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl font-semibold tracking-tight">Findings</h2>
+          <p className="text-sm text-muted-foreground">
+            {signalResults.length} finding{signalResults.length !== 1 ? "s" : ""} in your engagement.
+            {accessLevel >= 2 && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {accessLevel === 2
+                  ? "Analytics access — decrypt flagged values from your findings."
+                  : "Full access — decrypt flagged values on demand."
+                }
+              </span>
+            )}
+          </p>
+        </div>
+        <FindingSync
+          auditRegistryAddress={auditRegistryAddress}
+          reviewRegistryAddress={reviewRegistryAddress}
+          walletAddress={walletAddress}
+          deployedAtBlock={deployedAtBlock}
+        />
       </div>
 
       {/* Filters */}

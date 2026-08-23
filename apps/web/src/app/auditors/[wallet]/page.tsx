@@ -9,6 +9,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AuditorShell } from "@/components/auditors/AuditorShell";
+import { FindingSync } from "@/components/auditors/FindingSync";
 import { TestRules } from "@/components/auditors/TestRules";
 import { Findings } from "@/components/auditors/Findings";
 import { Analytics } from "@/components/auditors/Analytics";
@@ -87,8 +88,10 @@ export default function AuditorPortalPage() {
                     <div className={activeView === "findings" ? "block" : "hidden"}>
                       <Findings
                         auditRegistryAddress={auditRegistryAddress}
+                        reviewRegistryAddress={reviewRegistryAddress}
                         accessLevel={accessLevel}
                         walletAddress={walletAddress}
+                        deployedAtBlock={deployedAtBlock}
                       />
                     </div>
 

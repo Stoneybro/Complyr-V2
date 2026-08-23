@@ -137,7 +137,7 @@ export function TestConfigurator({
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="space-y-1.5">
             <Label>Priority Level</Label>
-            <Select value={priority} onValueChange={setPriority}>
+            <Select value={priority} onValueChange={(value) => { if (value !== null) setPriority(value); }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select priority">
                   {priority === "1" ? "Monitoring (Periodic)" : priority === "2" ? "Standard (Every Payment)" : priority === "3" ? "Critical (High Severity)" : ""}
@@ -172,7 +172,7 @@ export function TestConfigurator({
           {testDefinition.requiresScope && (
             <div className="space-y-1.5">
               <Label>GL Category Scope</Label>
-              <Select value={scope} onValueChange={setScope}>
+              <Select value={scope} onValueChange={(value) => { if (value !== null) setScope(value); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select category">
                     {CATEGORY_OPTIONS[parseInt(scope)]?.label || "Select category"}
