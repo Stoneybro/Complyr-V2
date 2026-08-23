@@ -51,7 +51,7 @@ const PULL_INTERVAL_MS = 15_000;
 const FULL_SCAN_RPC_URLS = [
   "https://ethereum-sepolia-rpc.publicnode.com",
 ];
-const FULL_SCAN_WINDOW = 50_000n;
+const FULL_SCAN_WINDOW = 50_000;
 
 export type PullStatus =
   | "idle"
@@ -127,28 +127,29 @@ async function fetchEvaluatedLogsFullRange(
   walletAddress: `0x${string}`,
   deployedAtBlock: bigint
 ): Promise<PulledEvaluation[] | null> {
-  const fromBlock = deployedAtBlock > 0n ? deployedAtBlock : 0n;
+  // All window math is done in plain numbers — mixing BigInt literals with
+  // runtime values in these expressions crashes Next's build-time static
+  // analyzer ("Cannot mix BigInt and other types").
+  const fromNum = Number(deployedAtBlock);
+  const start = fromNum > 0 ? fromNum : 0;
   for (const url of FULL_SCAN_RPC_URLS) {
     try {
       const client = createPublicClient({
         chain: sepolia,
         transport: http(url, { timeout: 60_000 }),
       });
-      const latest = await client.getBlockNumber();
+      const latest = Number(await client.getBlockNumber());
       const events: PulledEvaluation[] = [];
 
-      let windowFrom = fromBlock;
-      while (windowFrom <= latest) {
-        const windowTo =
-          windowFrom + FULL_SCAN_WINDOW - 1n > latest
-            ? latest
-            : windowFrom + FULL_SCAN_WINDOW - 1n;
+      let f = start;
+      while (f <= latest) {
+        const t = Math.min(f + FULL_SCAN_WINDOW - 1, latest);
         const logs = await client.getLogs({
           address: reviewRegistryAddress,
           event: TEST_EVALUATED_EVENT,
           args: { auditor: walletAddress },
-          fromBlock: windowFrom,
-          toBlock: windowTo,
+          fromBlock: BigInt(f),
+          toBlock: BigInt(t),
         });
         for (const log of logs) {
           events.push({
@@ -158,7 +159,7 @@ async function fetchEvaluatedLogsFullRange(
             testType: log.args.testType,
           });
         }
-        windowFrom = windowTo + 1n;
+        f = t + 1;
       }
       return events;
     } catch {
@@ -183,34 +184,37 @@ async function fetchEvaluatedLogsChunked(
 ): Promise<PulledEvaluation[]> {
   const latest = await publicClient.getBlockNumber();
 
-  let from: bigint | null = null;
+  // All window/cursor math runs in plain numbers (see note in
+  // fetchEvaluatedLogsFullRange); BigInt is only used at the RPC boundary.
+  let from: number | null = null;
   try {
     const stored = localStorage.getItem(
       cursorCacheKey(chainId, reviewRegistryAddress, walletAddress)
     );
     if (stored !== null && /^\d+$/.test(stored)) {
-      from = BigInt(stored) + 1n;
+      from = Number(stored) + 1;
     }
   } catch {
     // localStorage unavailable — fall through to deployedAtBlock
   }
   if (from === null) {
-    from = deployedAtBlock > 0n ? deployedAtBlock : latest;
+    const deployed = Number(deployedAtBlock);
+    from = deployed > 0 ? deployed : Number(latest);
   }
 
   const events: PulledEvaluation[] = [];
 
   // Plan the windows for this cycle up front
   const windows: Array<{ from: bigint; to: bigint }> = [];
-  let cursor = from;
-  while (cursor <= latest && windows.length < MAX_WINDOWS_PER_CYCLE) {
-    const to =
-      cursor + LOG_WINDOW - 1n > latest ? latest : cursor + LOG_WINDOW - 1n;
-    windows.push({ from: cursor, to });
-    cursor = to + 1n;
+  const latestNum = Number(latest);
+  let f = from;
+  while (f <= latestNum && windows.length < MAX_WINDOWS_PER_CYCLE) {
+    const t = Math.min(f + Number(LOG_WINDOW) - 1, latestNum);
+    windows.push({ from: BigInt(f), to: BigInt(t) });
+    f = t + 1;
   }
 
-  let lastCompletedBlock = from - 1n;
+  let lastCompletedBlock = from - 1;
   for (let i = 0; i < windows.length; i += WINDOW_CONCURRENCY) {
     const batch = windows.slice(i, i + WINDOW_CONCURRENCY);
     const chunks = await Promise.all(
@@ -253,7 +257,7 @@ async function fetchEvaluatedLogsChunked(
         });
       }
     }
-    lastCompletedBlock = batch[batch.length - 1].to;
+    lastCompletedBlock = Number(batch[batch.length - 1].to);
 
     // Save progress after every batch so a failed cycle doesn't redo work
     try {
@@ -296,7 +300,7 @@ export function useFindingsPuller({
       !walletAddress ||
       // Wait until the registry's deployment block is known — starting from
       // an unknown point would persist a head cursor and skip past events.
-      deployedAtBlock <= 0n
+      Number(deployedAtBlock) <= 0
     ) {
       return null;
     }
@@ -466,7 +470,7 @@ export function useFindingsPuller({
         );
 
         const value = results[handleHex];
-        const triggered = value === true || value === 1n;
+        const triggered = value === true || Number(value) === 1;
 
         if (!triggered) {
           // Test passed — no finding, no on-chain trace (same as the relay).
