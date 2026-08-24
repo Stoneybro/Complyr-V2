@@ -10,6 +10,7 @@ import {
 import { sepolia } from "wagmi/chains";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import ComplyrFactoryAbi from "@/lib/abis/ComplyrFactory.json";
 import { ComplyrFactoryAddress } from "@/lib/CA";
 
@@ -91,15 +92,15 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
       <p className="text-base text-muted-foreground leading-relaxed mb-10">
         {isConfirmed
           ? "Your Complyr smart registries are live on Sepolia. Moving to security settings…"
-          : "We are deploying an isolated pair of smart contracts for your business. Ownership is transferred to you immediately."}
+          : "This creates an isolated environment for running audits over confidential transactions: a dedicated pair of smart contracts, owned by no one but you."}
       </p>
 
       {/* What gets deployed — idle only */}
       {!isDeploying && !isConfirmed && !error && (
         <div className="mb-8 space-y-2.5">
           {[
-            "Deploy dedicated smart contracts for encrypted payments and compliance tests",
-            "Transfer full contract ownership directly to your wallet",
+            "Dedicated contracts for encrypted payments and the compliance tests that evaluate them",
+            "Full contract ownership transferred to your wallet at deploy time — the platform holds nothing",
           ].map((item) => (
             <div key={item} className="flex items-start gap-3 text-base">
               <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -108,9 +109,10 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
           ))}
           <Alert className="mt-6 border-primary/20 bg-primary/5">
           <InfoIcon />
-            <AlertTitle className="text-primary font-bold">Demo Bonus</AlertTitle>
+            <AlertTitle className="text-primary font-bold">Funded for testing</AlertTitle>
             <AlertDescription className="text-foreground/80 leading-relaxed">
-              Your workspace will be automatically funded with 5,000 cUSDC for testing.
+              5,000 test cUSDC is minted automatically so you can send real confidential
+              payments end-to-end.
             </AlertDescription>
           </Alert>
         </div>
@@ -128,24 +130,30 @@ export function DeployRegistryStep({ walletAddress, onDeployed }: DeployRegistry
 
       {/* CTA */}
       {!isConfirmed && (
-        <button
+        <Button
           id="btn-deploy-registry"
           onClick={handleDeploy}
           disabled={isDeploying}
-          className="h-11 rounded-lg bg-primary px-6 text-base font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+          className="gap-2"
         >
           {isDeploying ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {isWaitingForSignature ? "Waiting for MetaMask…" : "Confirming…"}
+              <Loader2 data-icon="inline-start" className="animate-spin" />
+              {isWaitingForSignature ? "Waiting for wallet…" : "Confirming…"}
             </>
           ) : error ? (
-            <>Retry <ArrowRight className="h-4 w-4" /></>
+            <>Retry <ArrowRight data-icon="inline-end" /></>
           ) : (
-            <>Deploy Workspace <ArrowRight className="h-4 w-4" /></>
+            <>Deploy Workspace <ArrowRight data-icon="inline-end" /></>
           )}
-        </button>
+        </Button>
       )}
+
+      <p className="mt-6 text-xs leading-relaxed text-muted-foreground/80">
+        Complyr is an experiment in how audits can be carried out on confidential
+        token transactions — this Sepolia deployment is a demonstration, and a
+        production setup would differ.
+      </p>
     </div>
   );
 }

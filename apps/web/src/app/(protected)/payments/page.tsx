@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { AppSidebar, type AppView } from "@/components/ui/app-sidebar";
 import {
   SidebarInset,
@@ -11,13 +11,15 @@ import { PaymentForm } from "@/components/payment-form/PaymentForm";
 import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
 import { AuditOverview } from "@/components/audits/AuditOverview";
 import { TransactionHistory } from "@/components/transactions/TransactionHistory";
-import { ArrowRight, ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink, InfoIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useReadContract } from "wagmi";
+import { useReadContract, usePublicClient } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
 import AuditRegistryAbi from "@/lib/abis/AuditRegistry.json";
 import { useOnboardingState } from "@/hooks/useOnboardingState";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,14 +49,34 @@ export default function Page() {
   const auditRegistryAddress = state.phase === "ready" ? state.auditRegistryAddress : undefined;
   const walletAddress = state.phase === "ready" ? state.walletAddress : undefined;
 
-  const { data: auditorCountData } = useReadContract({
-    address: auditRegistryAddress,
-    abi: AuditRegistryAbi,
-    functionName: "auditorCount",
-    query: {
-      enabled: !!auditRegistryAddress,
+  const publicClient = usePublicClient();
+  const { data: auditorCountData } = useQuery({
+    queryKey: ["auditor-count", auditRegistryAddress],
+    queryFn: async () => {
+      if (!publicClient || !auditRegistryAddress) return 0;
+      const result = await publicClient.readContract({
+        address: auditRegistryAddress,
+        abi: AuditRegistryAbi,
+        functionName: "auditorCount",
+      });
+      return Number(result ?? 0);
     },
+    enabled: !!publicClient && !!auditRegistryAddress,
+    // Shared key so AuditorManagement can invalidate it the moment a grant
+    // confirms — lifts the payments lock without a page refresh.
+    refetchInterval: 15_000,
   });
+
+  // Payments require at least one auditor (possibly the owner's own address):
+  // tests are evaluated against payments at send time, so without an auditor
+  // nothing is auditable. Until one exists, users stay on the Audits view.
+  const hasAuditor = auditorCountData !== undefined && Number(auditorCountData) > 0;
+
+  useEffect(() => {
+    if (auditorCountData !== undefined && !hasAuditor && activeView === "payments") {
+      setActiveView("audits");
+    }
+  }, [auditorCountData, hasAuditor, activeView]);
 
   const handleAuditorNavigation = () => {
     const count = Number(auditorCountData ?? 0);
@@ -79,6 +101,7 @@ export default function Page() {
           setActiveView(view);
         }}
         isLocked={!isDashboardReady}
+        lockedViews={hasAuditor ? [] : ["payments"]}
       />
 
       <SidebarInset>
@@ -119,22 +142,37 @@ export default function Page() {
         {/* Content area — gated by OnboardingShell */}
         <div className="flex flex-1 flex-col">
           <OnboardingShell onPhaseChange={handlePhaseChange}>
-            {({ walletAddress, auditRegistryAddress, reviewRegistryAddress }) => (
+            {({ walletAddress, auditRegistryAddress, reviewRegistryAddress }) => {
+              return (
               <div className="flex flex-1 flex-col px-6 py-4">
                 {activeView === "payments" && (
                   <PaymentForm
                     walletAddress={walletAddress}
                     auditRegistryAddress={auditRegistryAddress}
-                    hasAuditor={Number(auditorCountData ?? 0) > 0}
+                    hasAuditor={hasAuditor}
                     onNavigateToAudits={() => setActiveView("audits")}
                   />
                 )}
 
                 {activeView === "audits" && (
-                  <AuditOverview
-                    auditRegistryAddress={auditRegistryAddress}
-                    businessAddress={walletAddress}
-                  />
+                  <div className="flex flex-col gap-4">
+                    {!hasAuditor && (
+                      <Alert className="max-w-4xl mx-auto w-full">
+                        <InfoIcon />
+                        <AlertTitle>Payments are locked until you add an auditor</AlertTitle>
+                        <AlertDescription>
+                          Audit tests evaluate payments at send time, so at least one
+                          auditor must exist first — your own address works too. Add one
+                          below, then open the auditor portal and configure the tests
+                          that should run against your payments.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <AuditOverview
+                      auditRegistryAddress={auditRegistryAddress}
+                      businessAddress={walletAddress}
+                    />
+                  </div>
                 )}
 
                 {activeView === "transactions" && (
@@ -145,7 +183,8 @@ export default function Page() {
                 )}
 
               </div>
-            )}
+              );
+            }}
           </OnboardingShell>
         </div>
       </SidebarInset>

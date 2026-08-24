@@ -164,7 +164,7 @@ export function InitializeDefaultsStep({
         {isEncrypting ? (
           <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Encrypting defaults…</>
         ) : isWaitingForSignature ? (
-          <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Waiting for MetaMask…</>
+          <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Waiting for wallet…</>
         ) : isConfirming ? (
           <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Confirming on Sepolia…</>
         ) : isConfirmed ? (

@@ -8,6 +8,7 @@ import {
   LogOut,
   FileSearchCorner,
   Loader2,
+  Lock,
   RotateCw,
 } from "lucide-react";
 import { useDisconnect, useAccount, useChainId } from "wagmi";
@@ -69,6 +70,8 @@ type AppSidebarProps = {
   onNavigate: (view: AppView) => void;
   /** When true, all nav items are disabled until setup is complete */
   isLocked?: boolean;
+  /** Individual views currently unavailable (e.g. Payments until an auditor exists) */
+  lockedViews?: AppView[];
   /** Called synchronously before wagmi's disconnect() — use to wipe localStorage */
   onBeforeDisconnect?: () => void;
 } & React.ComponentProps<typeof Sidebar>;
@@ -78,6 +81,7 @@ export function AppSidebar({
   activeView,
   onNavigate,
   isLocked = false,
+  lockedViews = [],
   onBeforeDisconnect,
   ...props
 }: AppSidebarProps) {
@@ -101,8 +105,10 @@ export function AppSidebar({
     isLoading: isBalanceLoading,
     isFetching: isBalanceFetching,
     isUnlocking,
+    isLocked: isBalanceLocked,
+    unlock: unlockBalance,
     invalidate,
-  } = useConfidentialBalance();
+  } = useConfidentialBalance({ deferred: isLocked });
 
   const symbol = "cUSDC";
 
@@ -163,29 +169,41 @@ export function AppSidebar({
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Balance
                         </span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger
-                              onClick={() => invalidate()}
-                              disabled={isBalanceFetching || isUnlocking}
-                              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                            >
-                              <RotateCw className={`h-3.5 w-3.5 ${isBalanceFetching || isUnlocking ? 'animate-spin' : ''}`} />
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <p className="text-xs">Refresh Balance</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        {!isLocked && isBalanceLocked ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-5 gap-1 rounded-md px-1.5 text-[10px] font-normal text-muted-foreground"
+                            onClick={unlockBalance}
+                          >
+                            <Lock data-icon="inline-start" />
+                            Decrypt
+                          </Button>
+                        ) : !isLocked ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger
+                                onClick={() => invalidate()}
+                                disabled={isBalanceFetching || isUnlocking}
+                                className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                              >
+                                <RotateCw className={`h-3.5 w-3.5 ${isBalanceFetching || isUnlocking ? 'animate-spin' : ''}`} />
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                <p className="text-xs">Refresh Balance</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : null}
                       </div>
-                      <div className="flex items-baseline gap-1.5">
+                                      <div className="flex items-baseline gap-1.5">
                         {isUnlocking ? (
                           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Decrypting...
+                            Waiting for signature…
                           </span>
-                        ) : isBalanceLoading ? (
-                          <span className="text-2xl font-semibold tracking-tight text-muted-foreground animate-pulse">
+                        ) : isBalanceLocked || isBalanceLoading ? (
+                          <span className="text-2xl font-semibold tracking-tight text-muted-foreground/60 animate-pulse">
                             ···
                           </span>
                         ) : (
@@ -212,38 +230,44 @@ export function AppSidebar({
                 </SidebarMenuItem>
               )}
 
-              {navItems.map((item) => (
+              {navItems.map((item) => {
+                const isItemLocked = isLocked || lockedViews.includes(item.id);
+                const lockHint = isLocked
+                  ? "Complete setup to unlock"
+                  : "Add an auditor to unlock";
+                return (
                 <SidebarMenuItem key={item.id}>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
-                        className={isLocked ? "cursor-not-allowed w-full" : "w-full"}
+                        className={isItemLocked ? "cursor-not-allowed w-full" : "w-full"}
                         render={<span />}
                       >
                         <SidebarMenuButton
-                          isActive={!isLocked && activeView === item.id}
-                          onClick={() => !isLocked && onNavigate(item.id)}
-                          tooltip={isLocked ? undefined : item.title}
+                          isActive={!isItemLocked && activeView === item.id}
+                          onClick={() => !isItemLocked && onNavigate(item.id)}
+                          tooltip={isItemLocked ? undefined : item.title}
                           className={`gap-3 py-5 mt-1 rounded transition-opacity w-full ${
-                            isLocked
+                            isItemLocked
                               ? "opacity-40 pointer-events-none select-none"
                               : ""
                           }`}
-                          aria-disabled={isLocked}
+                          aria-disabled={isItemLocked}
                         >
                           <item.icon className="shrink-0" />
                           <span>{item.title}</span>
                         </SidebarMenuButton>
                       </TooltipTrigger>
-                      {isLocked && (
+                      {isItemLocked && (
                         <TooltipContent side="right">
-                          <p className="text-xs">Complete setup to unlock</p>
+                          <p className="text-xs">{lockHint}</p>
                         </TooltipContent>
                        )}
                     </Tooltip>
                   </TooltipProvider>
                 </SidebarMenuItem>
-              ))}
+                );
+              })}
 
               {/* Logout Action Button */}
               {actualWalletAddress && (

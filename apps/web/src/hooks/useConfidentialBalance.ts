@@ -33,12 +33,16 @@
  *   ): Promise<UserDecryptResults>        // Record<`0x${handle}`, bigint | boolean | `0x${string}`>
  */
 
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useReadContract, useChainId, useWalletClient } from "wagmi";
 import { formatUnits } from "viem";
 import { fheHandleToHex, type FheHandle } from "@/lib/fhe-handle";
 import { getFhevmInstance } from "@/lib/fhe";
-import { getDecryptSession, clearDecryptSession } from "@/lib/decrypt-session";
+import {
+  getDecryptSession,
+  clearDecryptSession,
+} from "@/lib/decrypt-session";
 import { ConfidentialUSDCAddress } from "@/lib/CA";
 import ConfidentialUSDCAbi from "@/lib/abis/ConfidentialUSDC.json";
 
@@ -53,19 +57,35 @@ export interface ConfidentialBalanceResult {
   isLoading: boolean;
   /** True when any query is actively refetching */
   isFetching: boolean;
-  /** True specifically while the EIP-712 signing prompt is in flight */
+  /** True specifically while the EIP-712 signing prompt / decryption is in flight */
   isUnlocking: boolean;
+  /** True when decryption has not been authorised yet — show a locked placeholder */
+  isLocked: boolean;
+  /** True when decryption was attempted but failed — offer a retry */
+  isFailed: boolean;
   /** Error from either query */
   error: Error | null;
+  /** Authorise decryption — triggers the EIP-712 wallet prompt (once per session) */
+  unlock: () => void;
   /** Call to explicitly refetch the handle (triggers re-decryption if balance changed) */
   invalidate: () => void;
 }
 
-export function useConfidentialBalance(): ConfidentialBalanceResult {
+export function useConfidentialBalance(
+  options?: { deferred?: boolean }
+): ConfidentialBalanceResult {
+  // deferred: never decrypt, even with a cached session (used during
+  // onboarding — no wallet prompts should fire before setup completes).
+  const deferred = options?.deferred ?? false;
   const { address } = useAccount();
   const chainId = useChainId();
   const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
+
+  // Decryption requires an EIP-712 signature, so it NEVER runs implicitly.
+  // It only starts when the user clicks unlock() — even if a cached session
+  // exists, clicking merely avoids a repeat prompt within the same tab.
+  const [unlockRequested, setUnlockRequested] = useState(false);
 
   // ── Query 1: fetch the encrypted ciphertext handle from the contract ───────
   // This polls cheaply on a 15s interval. No wallet interaction required.
@@ -109,44 +129,60 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
         return 0n;
       }
 
-      const fhevm = await getFhevmInstance();
+      try {
+        const fhevm = await getFhevmInstance();
 
-      // getDecryptSession prompts the wallet only on first call per tab/session
-      const session = await getDecryptSession(
-        chainId,
-        address,
-        ConfidentialUSDCAddress,
-        (typedData) =>
-          walletClient.signTypedData(
-            typedData as Parameters<typeof walletClient.signTypedData>[0]
-          )
-      );
+        // getDecryptSession prompts the wallet only on first call per tab/session
+        const session = await getDecryptSession(
+          chainId,
+          address,
+          ConfidentialUSDCAddress,
+          (typedData) =>
+            walletClient.signTypedData(
+              typedData as Parameters<typeof walletClient.signTypedData>[0]
+            )
+        );
 
-      // userDecrypt expects the handle as a 0x-prefixed bytes32 hex string.
-      const handleHex = fheHandleToHex(encHandle as FheHandle);
+        // userDecrypt expects the handle as a 0x-prefixed bytes32 hex string.
+        const handleHex = fheHandleToHex(encHandle as FheHandle);
 
-      const results = await fhevm.userDecrypt(
-        [{ handle: handleHex, contractAddress: ConfidentialUSDCAddress }],
-        session.privateKey,    // no-0x hex
-        session.publicKey,     // no-0x hex
-        session.signature,     // 0x-prefixed
-        [ConfidentialUSDCAddress],
-        address,
-        session.startTimestamp,
-        session.durationDays
-      );
+        const results = await fhevm.userDecrypt(
+          [{ handle: handleHex, contractAddress: ConfidentialUSDCAddress }],
+          session.privateKey,    // no-0x hex
+          session.publicKey,     // no-0x hex
+          session.signature,     // 0x-prefixed
+          [ConfidentialUSDCAddress],
+          address,
+          session.startTimestamp,
+          session.durationDays
+        );
 
-      // results is Record<`0x${handle}`, bigint | boolean | `0x${string}`>
-      const value = results[handleHex];
-      if (value === undefined || value === null) {
-        throw new Error("Decryption returned no value for handle");
+        // results is Record<`0x${handle}`, bigint | boolean | `0x${string}`>
+        const value = results[handleHex];
+        if (value === undefined || value === null) {
+          throw new Error("Decryption returned no value for handle");
+        }
+
+        return BigInt(value as bigint | string);
+      } catch (err) {
+        // Self-healing: a failed attempt (rejected prompt, expired/invalid
+        // session, KMS error) invalidates the cached session so the next
+        // unlock() request prompts fresh instead of retrying with dead state.
+        clearDecryptSession(chainId, address, ConfidentialUSDCAddress);
+        throw err;
       }
-
-      return BigInt(value as bigint | string);
     },
-    enabled: !!address && !!walletClient && encHandle != null && handleKey !== null,
+    enabled:
+      !!address &&
+      !!walletClient &&
+      encHandle != null &&
+      handleKey !== null &&
+      !deferred &&
+      unlockRequested,
     staleTime: Infinity,
-    retry: 1,
+    // Never auto-retry — a rejected signature must not trigger an immediate
+    // second wallet popup.
+    retry: false,
   });
 
   const invalidate = () => {
@@ -176,7 +212,10 @@ export function useConfidentialBalance(): ConfidentialBalanceResult {
     isLoading,
     isFetching,
     isUnlocking,
+    isLocked: deferred || !unlockRequested,
+    isFailed: !!decryptError,
     error,
+    unlock: () => setUnlockRequested(true),
     invalidate,
   };
 }

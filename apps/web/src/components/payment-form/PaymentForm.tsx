@@ -146,8 +146,7 @@ export function PaymentForm({
             setTransactionStatus("Complete");
             setSingle(emptyRecipient());
             setErrors({});
-            toast.success("Payment submitted successfully");
-            
+
             // Reset file inputs visually
             const form = e.target as HTMLFormElement;
             form.reset();
@@ -165,10 +164,19 @@ export function PaymentForm({
                     <Info className="h-4 w-4" />
                     <AlertTitle>No auditor assigned</AlertTitle>
                     <AlertDescription className="text-wrap">
-                        You haven't authorized an external auditor yet. Check out the Audits page to add an auditor and configure tests, otherwise your payments will not be audited.
+                        Audit tests evaluate payments at send time. Add auditors and have
+                        them configure tests first — payments sent before that won't be audited.
                     </AlertDescription>
                     <AlertAction>
-                        <Button 
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={onNavigateToAudits}
+                        >
+                            Add auditors
+                        </Button>
+                        <Button
                             type="button"
                             variant="ghost"
                             size="icon"

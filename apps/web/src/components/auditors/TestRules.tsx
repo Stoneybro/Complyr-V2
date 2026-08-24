@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import ReviewTestRegistryAbi from "@/lib/abis/ReviewTestRegistry.json";
+import { Alert, AlertDescription } from "@/components/ui/alert";import ReviewTestRegistryAbi from "@/lib/abis/ReviewTestRegistry.json";
 import { TestConfigurator } from "./TestConfigurator";
 import { CATEGORY_LABELS } from "@/lib/audit-enums";
 
@@ -127,7 +126,7 @@ export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
     );
   };
 
-  const getTestDetails = (test: typeof TEST_DEFINITIONS[number]) => {
+  const getTestDetails = (test: TestDefinition) => {
     const d = testResultMap[test.id];
     
     if (!test.configurable) {
@@ -181,6 +180,16 @@ export function TestRules({ reviewRegistryAddress }: TestRulesProps) {
           Configure encrypted audit thresholds. Threshold values are FHE-encrypted before leaving your browser.
         </p>
       </div>
+
+      {!CONFIGURABLE_TEST_IDS.some((id) => isConfigured(id)) && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            No tests are active yet. Configure at least one test below — payments
+            sent after that will be evaluated automatically.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="space-y-4">
         {CONFIGURABLE_TESTS.map((test) => (

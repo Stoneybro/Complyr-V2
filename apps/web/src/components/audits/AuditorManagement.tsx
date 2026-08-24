@@ -12,6 +12,7 @@ import { sepolia } from "wagmi/chains";
 import { getAddress, isAddress, type Abi } from "viem";
 import { Loader2, Trash2, Info, ExternalLink, History, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
@@ -101,6 +102,7 @@ function formatAddress(address: string) {
 
 export function AuditorManagement({ auditRegistryAddress, businessAddress }: AuditorManagementProps) {
   const { address: walletAddress } = useAccount();
+  const queryClient = useQueryClient();
   const [newAddress, setNewAddress] = useState("");
   const [newAccess, setNewAccess] = useState("analytics");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -229,20 +231,39 @@ export function AuditorManagement({ auditRegistryAddress, businessAddress }: Aud
     toast.success(
       pendingAction.type === "grant"
         ? "Auditor access granted"
-        : pendingAction.type === "revoke" 
+        : pendingAction.type === "revoke"
         ? "Auditor access revoked"
         : "Historical access granted",
       {
-        action: txHash ? {
-          label: "View Tx",
-          onClick: () => window.open(`https://sepolia.etherscan.io/tx/${txHash}`, "_blank"),
-        } : undefined,
+        description:
+          pendingAction.type === "grant"
+            ? "Next: open the auditor portal and configure tests"
+            : undefined,
+        action:
+          pendingAction.type === "grant" && businessAddress
+            ? {
+                label: "Open portal",
+                onClick: () =>
+                  window.open(`/auditors/${businessAddress}`, "_blank", "noopener,noreferrer"),
+              }
+            : txHash
+            ? {
+                label: "View Tx",
+                onClick: () => window.open(`https://sepolia.etherscan.io/tx/${txHash}`, "_blank"),
+              }
+            : undefined,
       }
     );
 
     refetchAuditors();
     refetchOwner();
     refetchAccess();
+    // Lift the payments lock immediately — the page-level gate reads this key
+    if (auditRegistryAddress) {
+      queryClient.invalidateQueries({
+        queryKey: ["auditor-count", auditRegistryAddress],
+      });
+    }
 
     const timer = setTimeout(() => {
       if (pendingAction.type === "grant") {

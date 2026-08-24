@@ -118,6 +118,20 @@ export async function getDecryptSession(
 }
 
 /**
+ * Returns true when a cached decrypt session already exists for the scope —
+ * i.e. decryption can proceed silently without another wallet prompt.
+ * Used to auto-enable balance decryption for returning sessions.
+ */
+export function hasDecryptSession(
+  chainId: number,
+  address: string,
+  contractAddress: string
+): boolean {
+  if (typeof window === "undefined") return false;
+  return sessionStorage.getItem(sessionKey(chainId, address, contractAddress)) !== null;
+}
+
+/**
  * Clears the decrypt session for the given scope.
  * Call this from onBeforeDisconnect so logout always wipes the cached session.
  */

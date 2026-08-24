@@ -289,11 +289,12 @@ export function useFindingsPuller({
 
   const busyRef = useRef(false);
 
-  const runPullCycle = useCallback(async (): Promise<PullOutcome | null> => {
+  // ── Scan phase (read-only — never touches the wallet) ──────────────────────
+  // Fetches TestEvaluated events and computes which results are still
+  // pending. Safe to run on a timer.
+  const scanPending = useCallback(async (): Promise<PulledEvaluation[] | null> => {
     if (
-      busyRef.current ||
       !publicClient ||
-      !walletClient ||
       chainId !== sepolia.id ||
       !reviewRegistryAddress ||
       !auditRegistryAddress ||
@@ -305,7 +306,6 @@ export function useFindingsPuller({
       return null;
     }
 
-    busyRef.current = true;
     try {
       // ── Step 1: fetch this auditor's TestEvaluated events ──────────────
       // Prefer a single full-range scan via a public RPC (no block-range cap);
@@ -337,9 +337,8 @@ export function useFindingsPuller({
 
       if (candidates.length === 0) {
         setPendingCount(0);
-        setStatus("idle");
         setLastError(null);
-        return { ok: true, upToDate: true };
+        return [];
       }
 
       // ── Step 2: build the set of (paymentId, testType) already recorded ─
@@ -418,12 +417,61 @@ export function useFindingsPuller({
       });
 
       setPendingCount(pending.length);
+      return pending;
+    } catch (err) {
+      // Scans stay quiet — a failed read shouldn't alarm the user
+      console.error("Findings scan failed:", err);
+      return null;
+    }
+  }, [
+    publicClient,
+    chainId,
+    reviewRegistryAddress,
+    auditRegistryAddress,
+    walletAddress,
+    deployedAtBlock,
+  ]);
 
-      if (pending.length === 0) {
+  // ── Pull phase (signs — runs ONLY on explicit user action) ────────────────
+  // One EIP-712 decrypt-session prompt plus one transaction per triggered
+  // test, so the UI must make clear these are coming before they start.
+  const runPullCycle = useCallback(async (): Promise<PullOutcome | null> => {
+    if (
+      busyRef.current ||
+      !publicClient ||
+      !walletClient ||
+      chainId !== sepolia.id ||
+      !reviewRegistryAddress ||
+      !auditRegistryAddress ||
+      !walletAddress ||
+      Number(deployedAtBlock) <= 0
+    ) {
+      return null;
+    }
+
+    busyRef.current = true;
+    try {
+      const pending = await scanPending();
+
+      if (pending === null || pending.length === 0) {
         setStatus("idle");
         setLastError(null);
         return { ok: true, upToDate: true };
       }
+
+      // Local cache of fully-processed events (incl. tests that passed)
+      const cacheKey = processedCacheKey(
+        chainId,
+        reviewRegistryAddress,
+        walletAddress
+      );
+      let stored: string[] = [];
+      try {
+        stored = JSON.parse(localStorage.getItem(cacheKey) ?? "[]");
+      } catch {
+        stored = [];
+      }
+      const processedSet = new Set(stored);
 
       // ── Step 4: establish the KMS decrypt session (one EIP-712 prompt) ──
       setStatus("awaiting-signature");
@@ -512,10 +560,7 @@ export function useFindingsPuller({
       }
       setStatus("idle");
       setLastError(null);
-      const remaining = pending.filter(
-        (log) => !processedSet.has(`${log.transactionHash}:${log.logIndex}`)
-      ).length;
-      return { ok: true, upToDate: remaining === 0 };
+      return { ok: true, upToDate: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // User rejected the signature prompt — stay quiet until next cycle
@@ -532,6 +577,7 @@ export function useFindingsPuller({
       busyRef.current = false;
     }
   }, [
+    scanPending,
     publicClient,
     walletClient,
     chainId,
@@ -542,20 +588,24 @@ export function useFindingsPuller({
   ]);
 
   useEffect(() => {
-    // Defer the first cycle so state updates never fire synchronously in the effect body
-    const initial = setTimeout(() => void runPullCycle(), 0);
-    const timer = setInterval(() => void runPullCycle(), PULL_INTERVAL_MS);
+    // Defer the first scan so state updates never fire synchronously in the effect body
+    const initial = setTimeout(() => void scanPending(), 0);
+    const timer = setInterval(() => {
+      // Skip background scans while a signing pull is in progress — the pull
+      // refreshes pendingCount itself as it records findings.
+      if (!busyRef.current) void scanPending();
+    }, PULL_INTERVAL_MS);
     return () => {
       clearTimeout(initial);
       clearInterval(timer);
     };
-  }, [runPullCycle]);
+  }, [scanPending]);
 
   return {
     status,
     pendingCount,
     lastError,
-    /** Manual pull — safe to call any time; no-ops while a cycle is already running */
+    /** Manual pull — signs and records pending findings; no-ops while running */
     pullNow: runPullCycle,
   };
 }

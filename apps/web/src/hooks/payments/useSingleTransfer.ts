@@ -81,7 +81,7 @@ export function useSingleTransfer() {
       const auditInputProof = amountProof;
 
       // ── Step 2: Submit to ConfidentialUSDC ────────────────────────────────
-      onStatusUpdate?.("Waiting for MetaMask…");
+      onStatusUpdate?.("Waiting for wallet…");
 
       const txHash = await writeContractAsync({
         address: ConfidentialUSDCAddress as `0x${string}`,
@@ -103,17 +103,20 @@ export function useSingleTransfer() {
       });
 
       onStatusUpdate?.("Confirming…");
-      return { txHash };
+      return { txHash, walletAddress };
     },
-    onSuccess: ({ txHash }) => {
+    onSuccess: (data) => {
       toast.success("Payment sent!", {
-        description: (
-          `${txHash.slice(0, 10)}…${txHash.slice(-8)}`
-        ),
+        description:
+          "Open the auditor portal's Findings tab to see whether it triggered an audit test.",
         action: {
-          label: "View",
+          label: "Open portal",
           onClick: () =>
-            window.open(`https://sepolia.etherscan.io/tx/${txHash}`, "_blank"),
+            window.open(
+              `/auditors/${data.walletAddress}`,
+              "_blank",
+              "noopener,noreferrer"
+            ),
         },
       });
     },

@@ -72,8 +72,11 @@ export function FindingSync({
   return (
     <div className="flex shrink-0 items-center gap-2">
       {pendingCount > 0 && (
-        <Badge variant="outline" className="gap-1">
-          <RefreshCw className="size-2.5 animate-spin" />
+        <Badge
+          variant="outline"
+          className="h-8 gap-1.5 rounded-md border-input px-3 text-xs font-normal text-muted-foreground"
+        >
+          <RefreshCw className="size-3 animate-spin" />
           {pendingCount} pending
         </Badge>
       )}
