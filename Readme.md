@@ -73,15 +73,15 @@ Complyr enforces a completely trustless relationship between the two sides.
 
 ## 🔍 FHE Technical Deep Dive
 
-The entire Complyr infrastructure is built around two core smart contracts and a dedicated relay service:
+Complyr's infrastructure pairs on-chain FHE smart contracts with a client-side findings pull engine in the auditor workspace:
 *   [AuditRegistry.sol](./packages/contracts/contracts/AuditRegistry.sol): stores encrypted payment records and business metadata.
 *   [ReviewTestRegistry.sol](./packages/contracts/contracts/ReviewTestRegistry.sol): stores encrypted audit rules and evaluates them against encrypted payment data.
 
-When a new business creates an account, [ComplyrFactory.sol](./packages/contracts/contracts/ComplyrFactory.sol) deploys isolated EIP-1167 minimal proxy clones of these two contracts and hands ownership to the business.
+When a business creates an account, [ComplyrFactory.sol](./packages/contracts/contracts/ComplyrFactory.sol) deploys isolated EIP-1167 minimal proxy clones of these two contracts and hands ownership to the business.
 
-Payments are executed through [ConfidentialUSDC.sol](./packages/contracts/contracts/ConfidentialUSDC.sol), an ERC 7984 compliant confidential token that keeps transfer amounts encrypted.
+Payments run through [ConfidentialUSDC.sol](./packages/contracts/contracts/ConfidentialUSDC.sol), an ERC 7984 compliant confidential token that keeps transfer amounts encrypted.
 
-Smart contracts cannot make decisions based on encrypted booleans. To bridge that limitation, [relay.py](./relay/relay.py) monitors the contracts, requests decryptions from the Zama KMS, and writes the final audit outcome back on chain without ever accessing the underlying ledger.
+Smart contracts cannot make decisions based on encrypted booleans. To resolve test outcomes without any centralized intermediary, the auditor workspace includes a client-side pull engine. The auditor's browser detects evaluation events, decrypts the boolean result using the Zama KMS via an EIP-712 session signature, and posts any triggered finding directly on-chain from the auditor's own wallet.
 
 ### Encrypted Fields at a Glance
 
@@ -93,7 +93,7 @@ Smart contracts cannot make decisions based on encrypted booleans. To bridge tha
 | GL category running total | `AuditRegistry` | `euint64` | ANALYTICS + FULL auditors, `ReviewTestRegistry` |
 | Recipient running total | `AuditRegistry` | `euint64` | ANALYTICS + FULL auditors, recipient |
 | Audit test threshold | `ReviewTestRegistry` | `euint64` | Configuring auditor only |
-| Test result (pass/fail) | `ReviewTestRegistry` | `ebool` | Configuring auditor, relay |
+| Test result (pass/fail) | `ReviewTestRegistry` | `ebool` | Configuring auditor only |
 | Flagged amount in a finding | `AuditRegistry` | `euint64` | FULL auditors only |
 | Invoice hash | `AuditRegistry` | `bytes32` (plaintext) | Public — acts as tamper-evident anchor |
 | PO hash | `AuditRegistry` | `bytes32` (plaintext) | Public — acts as tamper-evident anchor |
@@ -269,32 +269,42 @@ Once every rule has been evaluated, the results are stored as encrypted booleans
 
 ### 4. The Finding (The KMS Reveal)
 
-Smart contracts cannot make decisions based on encrypted values. After evaluating every audit rule, the contract holds an encrypted result but cannot determine whether it represents a pass or a failure. The chain itself is blind to its own output.
+Smart contracts cannot make decisions based on encrypted values. After evaluating each audit rule, the contract stores an encrypted boolean handle (`ebool`) but cannot tell whether it represents a pass or a failure. The chain itself remains blind to the output.
 
-Complyr resolves this limitation with a two step process.
+Complyr handles this with a client-driven evaluation flow inside the auditor portal.
 
-**Phase 1 — The Request**
-relay.py continuously monitors the blockchain for `TestEvaluated` events. When one appears, it submits the encrypted result to the Zama KMS for decryption. 
+**Phase 1 — Event Pull & KMS Decryption**
+While an auditor's workspace is open, the client pull engine polls for `TestEvaluated` events emitted by the business's `ReviewTestRegistry`. For each pending evaluation:
+1. The auditor's wallet signs an EIP-712 message once per session to open a secure decryption window with the Zama KMS.
+2. The browser fetches the encrypted `ebool` handle from `getTestResult()`.
+3. The browser calls `fhevm.userDecrypt()` to decrypt the result locally.
 
-**Phase 2 — The Trustless Reveal**
-Once the KMS returns the decrypted boolean, the relay calls back into the `ReviewTestRegistry`.
-
-*   If `triggered = false`: the function returns immediately. No finding is recorded. The payment simply remains part of the encrypted ledger. The privacy of compliant transactions is preserved.
-*   If `triggered = true`: the contract retrieves the `flaggedHandle` (the exact encrypted value that broke the rule), calls `auditRegistry.recordFinding()`, and writes an immutable audit finding to the `AuditRegistry`.
+**Phase 2 — Autonomous Finding Submission**
+Once decrypted client-side:
+*   If `triggered == false`: The test passed. The puller marks the event processed in browser storage and stops there. No transaction is submitted, preserving gas and keeping compliant transactions completely private.
+*   If `triggered == true`: The auditor's wallet calls `recordFindingIfTriggered()` on `ReviewTestRegistry`. The contract verifies the caller is an authorized auditor, fetches the stored `flaggedHandle` for that test, and writes an immutable finding to `AuditRegistry`.
 
 ```solidity
 // ReviewTestRegistry.sol
-function recordFindingIfTriggeredFor(
-    address auditor, uint256 paymentId, uint8 testType, bool triggered
+function recordFindingIfTriggered(
+    uint256 paymentId,
+    uint8 testType,
+    bool triggered
 ) external {
-    if (msg.sender != RELAY) revert Unauthorized();
+    _requireApprovedAuditor(msg.sender);
     if (!triggered) return; // test passed — no trace left on-chain
 
-    ReviewTest storage testConfig = _tests[auditor][testType];
-    euint64 flaggedHandle = _testedValues[auditor][paymentId][testType];
+    ReviewTest storage testConfig = _tests[msg.sender][testType];
+    euint64 flaggedHandle = _testedValues[msg.sender][paymentId][testType];
 
     auditRegistry.recordFinding(
-        paymentId, testType, uint8(testConfig.priority), flaggedHandle, bytes32(0), auditor, false
+        paymentId,
+        testType,
+        uint8(testConfig.priority),
+        flaggedHandle,
+        bytes32(0),
+        msg.sender,
+        false
     );
 }
 ```
@@ -336,13 +346,12 @@ Both controls accurately demonstrate encrypted authorization checks and finding 
 
 ## 🏗️ Architecture
 
-Complyr is a monorepo with three independent layers that each carry a distinct responsibility.
+Complyr is structured as a monorepo pairing the frontend application and client-side pull engine with the Solidity contracts:
 
 ```
-complyrv2/
-├── apps/web/           Next.js 15 client  (business workspace + auditor workspace)
-├── packages/contracts/ Hardhat project    (Solidity contracts + tests)
-└── relay/              Python relay       (event watcher + KMS bridge)
+complyr-v2/
+├── apps/web/           Next.js 15 client (business portal, auditor portal & findings puller)
+└── packages/contracts/ Hardhat project   (Solidity contracts + test suite)
 ```
 
 ### System Diagram
@@ -354,12 +363,17 @@ complyrv2/
 │  @zama-fhe/relayer-sdk/web  -- encrypts amounts, categories, and thresholds  │
 │                                 client-side before any tx is sent            │
 │                                                                              │
-│  Business workspace          Auditor workspace                                     │
-│  /payments  (send)        /auditors/[wallet]  (findings, decryption)        │
-└───────────────────────────────────┬──────────────────────────────────────────┘
-                                    │ encrypted handles + inputProof
-                                    ▼
-┌──────────────────────── Sepolia Testnet (Zama fhEVM) ───────────────────────┐
+│  Business workspace           Auditor workspace                             │
+│  /payments  (send)            /auditors/[wallet]                            │
+│                                 └─ Findings Pull Engine (useFindingsPuller) │
+│                                    • Scans TestEvaluated logs               │
+│                                    • Decrypts ebool via Zama KMS userDecrypt│
+│                                    • Submits recordFindingIfTriggered()     │
+└──────────────────┬────────────────────────────────────────▲─────────────────┘
+                   │ encrypted handles + inputProof         │
+                   │                                        │ recordFindingIfTriggered()
+                   ▼                                        │ (only when test triggers)
+┌──────────────────────── Sepolia Testnet (Zama fhEVM) ─────┴─────────────────┐
 │                                                                              │
 │  ComplyrFactory.sol                                                          │
 │  └─ deploys EIP-1167 clone pairs (AuditRegistry + ReviewTestRegistry)        │
@@ -380,63 +394,50 @@ complyrv2/
 │  ReviewTestRegistry.sol                                                      │
 │  ├─ holds encrypted test thresholds per auditor                              │
 │  ├─ runs FHE.gt / FHE.lt comparisons -- 4 tests per payment                 │
-│  └─ emits TestEvaluated(ebool handle) -- chain is blind to pass/fail        │
+│  ├─ grants ACL access: FHE.allow(result, auditor)                            │
+│  └─ emits TestEvaluated(auditor, paymentId, testType, result)                │
 │                                                                              │
 │  Zama fhEVM coprocessors execute all FHE arithmetic off-chain.               │
 │  ACL (Access Control List) governs which addresses can decrypt each handle.  │
-└───────────────────────────────────┬──────────────────────────────────────────┘
-                                    │ TestEvaluated event (encrypted ebool handle)
-                                    ▼
-┌──────────────────────── relay.py (Python) ──────────────────────────────────┐
-│  Polls ComplyrFactory for all registered business registries                 │
-│  Watches TestEvaluated events across all ReviewTestRegistry clones           │
-│                                                                              │
-│  On each event:                                                              │
-│  1. Takes the ebool handle from the event                                    │
-│  2. Calls kms_client.js (Node.js subprocess) with the handle                 │
-│  3. kms_client.js calls @zama-fhe/relayer-sdk publicDecrypt()                │
-│  4. Zama KMS threshold-decrypts the handle and returns bool + proof          │
-│  5. relay.py calls ReviewTestRegistry.recordFindingIfTriggeredFor()          │
-│     with the decrypted boolean                                               │
-│  6. If triggered=true, contract writes an immutable finding to AuditRegistry │
-│                                                                              │
-│  The relay never reads plaintext ledger data. It only submits KMS results.   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### The Client
 
-The web client is a Next.js 15 application with two separate workspaces served from the same codebase.
+The web client is a Next.js 15 application with two primary workspaces:
 
-**Business workspace** (`/payments`) handles payment creation. The business selects a recipient, enters an amount and GL category, attaches invoice and PO hashes, and submits. Before the transaction reaches the chain, `@zama-fhe/relayer-sdk/web` encrypts both the amount and the GL category in the browser. The resulting handles and input proof are passed directly to `confidentialTransferAndCallWithAudit`. No plaintext financial data ever leaves the browser.
+**Business workspace** (`/payments`) handles private payment creation. The business selects a recipient, enters an amount and GL category, attaches invoice and purchase order hashes, and submits. Before the transaction reaches the chain, the Zama SDK encrypts both the amount and the GL category directly in the browser. The resulting handles and zero-knowledge input proofs pass to `confidentialTransferAndCallWithAudit`. Plaintext financial numbers never leave the user's browser.
 
-**Auditor workspace** (`/auditors/[wallet]`) is a read-only view into findings and analytics. Analytics-tier auditors can decrypt rollup totals. Full-tier auditors can additionally decrypt the flagged handle on each finding. Decryption uses the Zama SDK's re-encryption flow, which requires the auditor's wallet to sign an EIP-712 message to prove identity before the KMS releases the ciphertext.
+**Auditor workspace** (`/auditors/[wallet]`) provides the auditor's review interface, housing analytics, historical findings, and the findings pull engine. Analytics-tier auditors can decrypt category rollups. Full-tier auditors can decrypt the flagged handles on findings. Decryption uses the Zama SDK's userDecrypt flow, requiring an EIP-712 signature from the auditor's connected wallet.
 
 The client is built on wagmi v2 and viem for all contract interactions, with the Zama SDK initialised as a singleton that survives React re-renders.
 
 ### The Contracts
 
-Five contracts make up the on-chain layer.
+The on-chain layer consists of five contracts:
 
 | Contract | Role |
 |---|---|
-| `ComplyrFactory.sol` | Deploys one EIP-1167 clone pair (AuditRegistry + ReviewTestRegistry) per business and maintains a registry of all deployments. |
-| `ConfidentialUSDC.sol` | ERC-7984 confidential token. The audit hook is built into the transfer function, making self-reporting impossible. |
-| `AuditRegistry.sol` | Stores encrypted payment records, runs the GL category rollup, manages auditor tiers and ACL grants, and holds findings. |
-| `ReviewTestRegistry.sol` | Stores encrypted test thresholds, evaluates all configured tests on every payment, and creates findings via callback from the relay. |
-| `IComplyrTypes.sol` | Shared struct definitions used across the other contracts. |
+| `ComplyrFactory.sol` | Deploys isolated EIP-1167 clone pairs (AuditRegistry + ReviewTestRegistry) per business and tracks all deployments. |
+| `ConfidentialUSDC.sol` | ERC-7984 confidential token. The audit callback is built directly into the transfer function, eliminating self-reporting. |
+| `AuditRegistry.sol` | Stores encrypted payment records, maintains the 8-bucket GL rollup, manages auditor tiers and ACL grants, and stores immutable findings. |
+| `ReviewTestRegistry.sol` | Stores encrypted test thresholds, evaluates rules on each payment, grants result read permissions to the auditor, and records findings when triggered. |
+| `IComplyrTypes.sol` | Shared struct definitions used across all contracts. |
 
-Each business gets its own isolated clone pair. One business's `AuditRegistry` has no knowledge of any other business's data.
+Each business receives its own clone pair. One business's registry cannot read or affect another business's records.
 
-### The Relay
+### The Findings Pull Engine
 
-The relay is a Python script (`relay.py`) with a Gradio UI for monitoring. It runs as a long-lived process alongside the application.
+Complyr uses a decentralized, client-side pull architecture built into the auditor workspace (`useFindingsPuller.ts`).
 
-On startup, the relay reads all registered business addresses from `ComplyrFactory` and builds a list of all `ReviewTestRegistry` clone addresses to watch. It then enters a polling loop, scanning for `TestEvaluated` events in batches of up to 100 blocks.
+When an auditor views the workspace, the pull engine runs directly in the browser:
 
-When an event arrives, the relay extracts the `ebool` handle and passes it to `kms_client.js`, a small Node.js subprocess that wraps the Zama relayer SDK. The subprocess calls `publicDecrypt()`, which contacts the Zama KMS threshold network, receives a decrypted boolean along with a KMS signature, and returns both to the relay. The relay then calls `recordFindingIfTriggeredFor()` on the appropriate `ReviewTestRegistry`, passing the boolean result. The contract verifies the call comes from the hardcoded relay address before writing any finding.
+1. **Log Discovery:** Scans for `TestEvaluated` events emitted by the business's `ReviewTestRegistry` clone, filtered to the connected auditor. It uses chunked queries and public RPC fallbacks to handle block-range caps cleanly.
+2. **Filtering & Deduplication:** Skips tests that don't need off-chain decryption (like Segregation of Duties, which logs plaintext findings directly during payment approval). It deduplicates pending events against existing findings recorded in `AuditRegistry` and a local browser cache, preventing redundant decryptions.
+3. **KMS Session Decryption:** Prompts the auditor for a single EIP-712 signature to open a decryption session. It fetches the encrypted test result handle via `getTestResult()` and calls `fhevm.userDecrypt()`.
+4. **On-Chain Recording:** If the test passed (`triggered == false`), the event is marked processed in local cache with zero gas spent. If a test fired (`triggered == true`), the auditor's wallet submits `recordFindingIfTriggered()`, permanently committing the finding to the `AuditRegistry`.
 
-The relay handles nonce management, EIP-1559 gas pricing, and stalled transaction retry logic to keep it operational on a live testnet.
+This keeps finding evaluation trustless: there are no custodial server wallets, no backend daemons to host, and all findings are verified and submitted directly by the auditor holding the engagement keys.
 
 ---
 
@@ -458,7 +459,7 @@ The implementation contracts are deployed once. Every business that creates an a
 - **Smart Contracts:** Solidity, Hardhat, fhEVM, ERC-7984
 - **Frontend:** Next.js 15, React 19, Tailwind CSS, shadcn/ui
 - **Web3 Integration:** wagmi v2, viem, `@zama-fhe/relayer-sdk`
-- **Relay / Oracle:** Python, Web3.py, Gradio
+- **Audit Engine:** Client-side Zama SDK pull engine (`fhevm.userDecrypt`, EIP-712 sessions)
 
 The smart contract layer includes a comprehensive test suite covering the full FHE lifecycle.
 *(Include a screenshot or block of your passing test suite here)*
@@ -471,9 +472,8 @@ The smart contract layer includes a comprehensive test suite covering the full F
 
 - Node.js >= 18
 - pnpm >= 9
-- Python >= 3.10
 - A Sepolia RPC URL (e.g. from Alchemy or Infura)
-- A funded Sepolia wallet for the relay
+- An Ethereum wallet (e.g. MetaMask) with Sepolia testnet ETH
 
 ### 1. Clone and install
 
@@ -512,30 +512,6 @@ The client is available at `http://localhost:3000`.
 cd packages/contracts
 npm test
 ```
-
-### 5. Configure and run the relay
-
-```bash
-cd relay
-pip install -r requirements.txt
-npm install   # installs kms_client.js dependencies
-```
-
-Create a `.env` file in `relay/`:
-
-```env
-PRIVATE_KEY=your_relay_wallet_private_key
-RPC_URL=your_sepolia_rpc_url
-FACTORY_ADDRESS=0x4508f247D0eBE3311e4dA32404cb75f308b20EBf
-```
-
-Start the relay:
-
-```bash
-python relay.py
-```
-
-The Gradio monitoring UI launches at `http://localhost:7860`.
 
 ---
 
